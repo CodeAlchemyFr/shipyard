@@ -8,6 +8,7 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }]
   ],
+  appearance: false, // Disable dark mode toggle
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     logo: { src: '/logo.png', width: 32, height: 32 },
