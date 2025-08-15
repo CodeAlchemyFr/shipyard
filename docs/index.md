@@ -14,7 +14,7 @@ hero:
       link: /getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/shipyard-run/shipyard
+      link: https://github.com/CodeAlchemyFr/shipyard
 
 features:
   - title: 🚀 Simple Deployment

@@ -4,7 +4,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "Shipyard",
   description: "Open Source PaaS Platform for Kubernetes - Deploy applications with ease",
-  base: '/shipyard/', // Replace with your GitHub repo name
+  base: '/shipyard/',
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }]
   ],
@@ -74,7 +74,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/shipyard-run/shipyard' }
+      { icon: 'github', link: 'https://github.com/CodeAlchemyFr/shipyard' }
     ],
 
     footer: {
@@ -83,7 +83,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/shipyard-run/shipyard/edit/main/docs/:path'
+      pattern: 'https://github.com/CodeAlchemyFr/shipyard/edit/main/docs/:path'
     },
 
     search: {
