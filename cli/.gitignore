@@ -1,0 +1,48 @@
+# Binary files
+shipyard
+shipyard.exe
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Go build artifacts
+*.o
+*.a
+*.so
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Mac files
+.DS_Store
+
+# Generated manifests output (YAML files)
+manifests/apps/
+manifests/shared/
+
+# Log files
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Test coverage
+coverage.out
+*.cover
+
+# Go vendor directory
+vendor/
+
+# Go module cache
+go.sum.backup

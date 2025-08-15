@@ -1,0 +1,188 @@
+package manifests
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"text/template"
+
+	"github.com/shipyard/cli/pkg/domains"
+)
+
+const ingressTemplateDomain = `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .BaseDomain }}-ingress
+  labels:
+    managed-by: shipyard
+    base-domain: {{ .BaseDomain }}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    {{- range .Domains }}
+    - {{ .Hostname }}
+    {{- end }}
+    secretName: {{ .BaseDomain }}-tls
+  rules:
+  {{- range .Domains }}
+  - host: {{ .Hostname }}
+    http:
+      paths:
+      - path: {{ .Path }}
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .AppName }}
+            port:
+              number: 80
+  {{- end }}
+`
+
+// GenerateIngressFromDatabase generates ingress files based on domains in database
+func (g *Generator) GenerateIngressFromDatabase() error {
+	// Create domain manager
+	domainManager, err := domains.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to create domain manager: %w", err)
+	}
+	defer domainManager.Close()
+
+	// Get all base domains
+	baseDomains, err := domainManager.GetBaseDomains()
+	if err != nil {
+		return fmt.Errorf("failed to get base domains: %w", err)
+	}
+
+	if len(baseDomains) == 0 {
+		fmt.Println("ℹ️  No domains found in database, skipping ingress generation")
+		return nil
+	}
+
+	// Create shared directory
+	sharedDir := filepath.Join(g.outputDir, "shared")
+	if err := os.MkdirAll(sharedDir, 0755); err != nil {
+		return fmt.Errorf("failed to create shared directory %s: %w", sharedDir, err)
+	}
+
+	// Generate ingress for each base domain
+	for _, baseDomain := range baseDomains {
+		domainsForBase, err := domainManager.GetDomainsByBaseDomain(baseDomain)
+		if err != nil {
+			return fmt.Errorf("failed to get domains for %s: %w", baseDomain, err)
+		}
+
+		ingressFile := filepath.Join(sharedDir, fmt.Sprintf("%s.yaml", baseDomain))
+		
+		if err := g.generateIngressFileFromDomains(ingressFile, baseDomain, domainsForBase); err != nil {
+			return fmt.Errorf("failed to generate ingress for %s: %w", baseDomain, err)
+		}
+
+		fmt.Printf("🌐 Generated ingress: %s (%d domains)\n", ingressFile, len(domainsForBase))
+	}
+
+	return nil
+}
+
+// generateIngressFileFromDomains creates an ingress file from domain list
+func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain string, domainList []domains.Domain) error {
+	// Prepare template data
+	ingressData := struct {
+		BaseDomain string
+		Domains    []domains.Domain
+	}{
+		BaseDomain: baseDomain,
+		Domains:    domainList,
+	}
+
+	tmpl, err := template.New("ingress").Parse(ingressTemplateDomain)
+	if err != nil {
+		return fmt.Errorf("failed to parse ingress template: %w", err)
+	}
+
+	file, err := os.Create(ingressFile)
+	if err != nil {
+		return fmt.Errorf("failed to create ingress file %s: %w", ingressFile, err)
+	}
+	defer file.Close()
+
+	if err := tmpl.Execute(file, ingressData); err != nil {
+		return fmt.Errorf("failed to execute ingress template: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateIngressFromDatabase updates ingress files based on current database state
+func (g *Generator) UpdateIngressFromDatabase(appName string) error {
+	// Create domain manager
+	domainManager, err := domains.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to create domain manager: %w", err)
+	}
+	defer domainManager.Close()
+
+	// Sync domains from config to database first
+	if len(g.config.Domains) > 0 {
+		fmt.Printf("🔄 Syncing %d domains from config to database...\n", len(g.config.Domains))
+		if err := domainManager.SyncDomainsFromConfig(appName, g.config.Domains); err != nil {
+			return fmt.Errorf("failed to sync domains from config: %w", err)
+		}
+	}
+
+	// Generate all ingress files from database
+	return g.GenerateIngressFromDatabase()
+}
+
+// CleanupIngressFiles removes ingress files for base domains that no longer have domains
+func (g *Generator) CleanupIngressFiles() error {
+	// Create domain manager
+	domainManager, err := domains.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to create domain manager: %w", err)
+	}
+	defer domainManager.Close()
+
+	// Get current base domains from database
+	baseDomains, err := domainManager.GetBaseDomains()
+	if err != nil {
+		return fmt.Errorf("failed to get base domains: %w", err)
+	}
+
+	baseDomainsMap := make(map[string]bool)
+	for _, baseDomain := range baseDomains {
+		baseDomainsMap[baseDomain] = true
+	}
+
+	// Check shared directory for orphaned ingress files
+	sharedDir := filepath.Join(g.outputDir, "shared")
+	if _, err := os.Stat(sharedDir); os.IsNotExist(err) {
+		return nil // No shared directory, nothing to clean
+	}
+
+	entries, err := os.ReadDir(sharedDir)
+	if err != nil {
+		return fmt.Errorf("failed to read shared directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".yaml" {
+			// Extract base domain from filename
+			baseDomain := entry.Name()[:len(entry.Name())-5] // Remove .yaml
+
+			// If this base domain no longer exists in database, remove the file
+			if !baseDomainsMap[baseDomain] {
+				filePath := filepath.Join(sharedDir, entry.Name())
+				if err := os.Remove(filePath); err != nil {
+					fmt.Printf("⚠️  Warning: failed to remove orphaned ingress file %s: %v\n", filePath, err)
+				} else {
+					fmt.Printf("🗑️  Removed orphaned ingress: %s\n", filePath)
+				}
+			}
+		}
+	}
+
+	return nil
+}
