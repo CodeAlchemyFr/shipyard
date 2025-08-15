@@ -1,0 +1,279 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            suffix: windows-arm64.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build CLI
+        working-directory: cli
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o shipyard-${{ matrix.suffix }} .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shipyard-${{ matrix.suffix }}
+          path: cli/shipyard-${{ matrix.suffix }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create installation scripts
+        run: |
+          # Create install script for Unix (Linux/macOS)
+          cat > install.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          # Shipyard CLI Installer
+          # Usage: curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
+          
+          REPO="CodeAlchemyFr/shipyard"
+          INSTALL_DIR="/usr/local/bin"
+          BINARY_NAME="shipyard"
+          
+          # Colors for output
+          RED='\033[0;31m'
+          GREEN='\033[0;32m'
+          YELLOW='\033[1;33m'
+          BLUE='\033[0;34m'
+          NC='\033[0m' # No Color
+          
+          echo -e "${BLUE}🚀 Installing Shipyard CLI...${NC}"
+          
+          # Detect OS and architecture
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+          
+          case $ARCH in
+            x86_64) ARCH="amd64" ;;
+            arm64|aarch64) ARCH="arm64" ;;
+            armv7l) ARCH="arm" ;;
+            *) echo -e "${RED}❌ Unsupported architecture: $ARCH${NC}"; exit 1 ;;
+          esac
+          
+          case $OS in
+            linux) PLATFORM="linux" ;;
+            darwin) PLATFORM="darwin" ;;
+            *) echo -e "${RED}❌ Unsupported OS: $OS${NC}"; exit 1 ;;
+          esac
+          
+          BINARY_URL="https://github.com/${REPO}/releases/latest/download/shipyard-${PLATFORM}-${ARCH}"
+          
+          echo -e "${YELLOW}📋 Detected platform: ${PLATFORM}-${ARCH}${NC}"
+          echo -e "${YELLOW}📦 Downloading from: ${BINARY_URL}${NC}"
+          
+          # Create temp directory
+          TMP_DIR=$(mktemp -d)
+          trap 'rm -rf $TMP_DIR' EXIT
+          
+          # Download binary
+          if command -v curl >/dev/null 2>&1; then
+            curl -sSL -o "$TMP_DIR/$BINARY_NAME" "$BINARY_URL"
+          elif command -v wget >/dev/null 2>&1; then
+            wget -qO "$TMP_DIR/$BINARY_NAME" "$BINARY_URL"
+          else
+            echo -e "${RED}❌ Neither curl nor wget found. Please install one of them.${NC}"
+            exit 1
+          fi
+          
+          # Check if download was successful
+          if [ ! -f "$TMP_DIR/$BINARY_NAME" ]; then
+            echo -e "${RED}❌ Failed to download Shipyard CLI${NC}"
+            exit 1
+          fi
+          
+          # Make binary executable
+          chmod +x "$TMP_DIR/$BINARY_NAME"
+          
+          # Install binary
+          if [ -w "$INSTALL_DIR" ]; then
+            mv "$TMP_DIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+          else
+            echo -e "${YELLOW}🔑 Installing to $INSTALL_DIR (requires sudo)${NC}"
+            sudo mv "$TMP_DIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+          fi
+          
+          echo -e "${GREEN}✅ Shipyard CLI installed successfully!${NC}"
+          echo -e "${BLUE}📖 Get started with: shipyard --help${NC}"
+          echo -e "${BLUE}📚 Documentation: https://codealchemy.github.io/shipyard/${NC}"
+          
+          # Verify installation
+          if command -v shipyard >/dev/null 2>&1; then
+            echo -e "${GREEN}🎉 Installation verified: $(shipyard --version)${NC}"
+          else
+            echo -e "${YELLOW}⚠️  Please add $INSTALL_DIR to your PATH or restart your terminal${NC}"
+          fi
+          EOF
+          
+          # Create install script for Windows (PowerShell)
+          cat > install.ps1 << 'EOF'
+          # Shipyard CLI Installer for Windows
+          # Usage: Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
+          
+          $ErrorActionPreference = "Stop"
+          
+          $REPO = "CodeAlchemyFr/shipyard"
+          $INSTALL_DIR = "$env:USERPROFILE\bin"
+          $BINARY_NAME = "shipyard.exe"
+          
+          Write-Host "🚀 Installing Shipyard CLI..." -ForegroundColor Blue
+          
+          # Detect architecture
+          $ARCH = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
+          if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { $ARCH = "arm64" }
+          
+          $BINARY_URL = "https://github.com/$REPO/releases/latest/download/shipyard-windows-$ARCH.exe"
+          
+          Write-Host "📋 Detected platform: windows-$ARCH" -ForegroundColor Yellow
+          Write-Host "📦 Downloading from: $BINARY_URL" -ForegroundColor Yellow
+          
+          # Create install directory
+          if (!(Test-Path $INSTALL_DIR)) {
+              New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
+          }
+          
+          $BINARY_PATH = Join-Path $INSTALL_DIR $BINARY_NAME
+          
+          try {
+              # Download binary
+              Invoke-WebRequest -Uri $BINARY_URL -OutFile $BINARY_PATH
+              
+              Write-Host "✅ Shipyard CLI installed successfully!" -ForegroundColor Green
+              Write-Host "📖 Get started with: shipyard --help" -ForegroundColor Blue
+              Write-Host "📚 Documentation: https://codealchemy.github.io/shipyard/" -ForegroundColor Blue
+              
+              # Add to PATH if not already there
+              $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+              if ($currentPath -notlike "*$INSTALL_DIR*") {
+                  [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$INSTALL_DIR", "User")
+                  Write-Host "🔄 Added $INSTALL_DIR to your PATH. Please restart your terminal." -ForegroundColor Yellow
+              }
+              
+              # Verify installation
+              & $BINARY_PATH --version
+              Write-Host "🎉 Installation verified!" -ForegroundColor Green
+              
+          } catch {
+              Write-Host "❌ Failed to install Shipyard CLI: $_" -ForegroundColor Red
+              exit 1
+          }
+          EOF
+
+      - name: Create checksums
+        run: |
+          # Generate checksums for all binaries
+          find . -name "shipyard-*" -type f -exec sha256sum {} \; > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            */shipyard-*
+            install.sh
+            install.ps1
+            checksums.txt
+          body: |
+            ## 🚀 Shipyard CLI Release ${{ github.ref_name }}
+            
+            ### Installation
+            
+            #### Quick Install (Linux/macOS)
+            ```bash
+            curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
+            ```
+            
+            #### Quick Install (Windows PowerShell)
+            ```powershell
+            Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
+            ```
+            
+            #### Manual Installation
+            
+            1. Download the appropriate binary for your platform:
+               - **Linux AMD64**: `shipyard-linux-amd64`
+               - **Linux ARM64**: `shipyard-linux-arm64`
+               - **macOS Intel**: `shipyard-darwin-amd64`
+               - **macOS Apple Silicon**: `shipyard-darwin-arm64`
+               - **Windows AMD64**: `shipyard-windows-amd64.exe`
+               - **Windows ARM64**: `shipyard-windows-arm64.exe`
+            
+            2. Make it executable (Linux/macOS):
+               ```bash
+               chmod +x shipyard-*
+               sudo mv shipyard-* /usr/local/bin/shipyard
+               ```
+            
+            3. Verify installation:
+               ```bash
+               shipyard --version
+               ```
+            
+            ### 📚 Documentation
+            
+            - [Getting Started](https://codealchemy.github.io/shipyard/getting-started)
+            - [CLI Reference](https://codealchemy.github.io/shipyard/cli/overview)
+            - [Deployment Guide](https://codealchemy.github.io/shipyard/guides/deployment)
+            
+            ### 🔐 Checksums
+            
+            All binaries are signed and checksums are provided in `checksums.txt`.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

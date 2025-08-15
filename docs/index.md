@@ -42,7 +42,21 @@ Shipyard bridges the gap between the simplicity of traditional PaaS platforms an
 - **Open Source** - MIT licensed, extensible, and community-driven
 - **Kubernetes Native** - Leverages K8s best practices and ecosystem
 
-### Quick Example
+### Quick Start
+
+#### 1. Install Shipyard
+
+**macOS & Linux:**
+```bash
+curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
+```
+
+**Windows:**
+```powershell
+Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
+```
+
+#### 2. Deploy Your First App
 
 ```bash
 # Configure your app
@@ -51,7 +65,7 @@ echo 'app:
   image: ghcr.io/user/my-app:latest
   port: 3000' > paas.yaml
 
-# Add registry credentials
+# Add registry credentials (if private image)
 shipyard registry add ghcr.io username token
 
 # Deploy to Kubernetes
@@ -59,6 +73,6 @@ shipyard deploy
 
 # Monitor deployment
 shipyard status
-shipyard logs
+shipyard logs my-app
 ```
 
