@@ -9,6 +9,7 @@ on:
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
+# Permissions globales
 permissions:
   contents: read
   pages: write
@@ -55,6 +56,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     needs: build
     runs-on: ubuntu-latest
+    # Permissions répétées pour éviter le bug "Resource not accessible by integration"
+    permissions:
+      pages: write
+      id-token: write
     name: Deploy
     steps:
       - name: Deploy to GitHub Pages
