@@ -8,6 +8,7 @@ Before installing Shipyard, ensure you have:
 
 - **Kubernetes cluster** - Access to a Kubernetes cluster (local or cloud)
 - **kubectl** - Kubernetes command-line tool configured
+- **metrics-server** - For CPU/memory metrics collection (recommended for monitoring)
 
 ### Quick Install (Recommended)
 
@@ -141,3 +142,23 @@ Ensure `kubectl` can connect to your cluster:
 ```bash
 kubectl cluster-info
 ```
+
+### Monitoring Setup (Recommended)
+
+For full monitoring capabilities, install metrics-server if not already present:
+
+```bash
+# Check if metrics-server is already installed
+kubectl get pods -n kube-system | grep metrics-server
+
+# If not found, install metrics-server
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+# Wait for deployment
+kubectl wait --for=condition=available --timeout=300s deployment/metrics-server -n kube-system
+
+# Verify installation
+kubectl top nodes
+```
+
+**Note:** Some local clusters (minikube, kind) may need additional configuration for metrics-server to work properly.

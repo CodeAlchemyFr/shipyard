@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,12 +22,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // Client wraps Kubernetes client functionality
 type Client struct {
 	clientset     kubernetes.Interface
 	dynamicClient dynamic.Interface
+	metricsClient metricsclientset.Interface
 	config        *rest.Config
 	namespace     string
 }
@@ -57,6 +61,12 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
+	// Create metrics client
+	metricsClient, err := metricsclientset.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metrics client: %w", err)
+	}
+
 	// Use default namespace or from context
 	namespace := "default"
 	if ns := os.Getenv("SHIPYARD_NAMESPACE"); ns != "" {
@@ -66,6 +76,7 @@ func NewClient() (*Client, error) {
 	return &Client{
 		clientset:     clientset,
 		dynamicClient: dynamicClient,
+		metricsClient: metricsClient,
 		config:        config,
 		namespace:     namespace,
 	}, nil
@@ -354,4 +365,117 @@ func (c *Client) getGVRForObject(obj *unstructured.Unstructured) (schema.GroupVe
 		Version:  gvk.Version,
 		Resource: resource,
 	}, nil
+}
+
+// Monitoring and Metrics Methods
+
+// GetPods returns pods for a given app
+func (c *Client) GetPods(appName string) ([]corev1.Pod, error) {
+	pods, err := c.clientset.CoreV1().Pods(c.namespace).List(
+		context.TODO(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("app=%s", appName),
+		})
+	if err != nil {
+		return nil, err
+	}
+	return pods.Items, nil
+}
+
+// GetPodMetrics returns metrics for pods of a given app
+func (c *Client) GetPodMetrics(appName string) ([]metricsv1beta1.PodMetrics, error) {
+	podMetrics, err := c.metricsClient.MetricsV1beta1().PodMetricses(c.namespace).List(
+		context.TODO(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("app=%s", appName),
+		})
+	if err != nil {
+		return nil, err
+	}
+	return podMetrics.Items, nil
+}
+
+// GetDeployment returns a specific deployment
+func (c *Client) GetDeployment(appName string) (*appsv1.Deployment, error) {
+	deployment, err := c.clientset.AppsV1().Deployments(c.namespace).Get(
+		context.TODO(), appName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return deployment, nil
+}
+
+// GetService returns a specific service
+func (c *Client) GetService(appName string) (*corev1.Service, error) {
+	service, err := c.clientset.CoreV1().Services(c.namespace).Get(
+		context.TODO(), appName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return service, nil
+}
+
+// GetEvents returns Kubernetes events for an app or cluster-wide
+func (c *Client) GetEvents(appName string) ([]corev1.Event, error) {
+	var labelSelector string
+	if appName != "" {
+		labelSelector = fmt.Sprintf("involvedObject.name=%s", appName)
+	}
+
+	events, err := c.clientset.CoreV1().Events(c.namespace).List(
+		context.TODO(), metav1.ListOptions{
+			LabelSelector: labelSelector,
+		})
+	if err != nil {
+		return nil, err
+	}
+	return events.Items, nil
+}
+
+// GetNodesMetrics returns node metrics for cluster health
+func (c *Client) GetNodesMetrics() ([]metricsv1beta1.NodeMetrics, error) {
+	nodeMetrics, err := c.metricsClient.MetricsV1beta1().NodeMetricses().List(
+		context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return nodeMetrics.Items, nil
+}
+
+// GetClusterInfo returns basic cluster information
+func (c *Client) GetClusterInfo() (map[string]interface{}, error) {
+	info := make(map[string]interface{})
+
+	// Get nodes
+	nodes, err := c.clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	readyNodes := 0
+	for _, node := range nodes.Items {
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
+				readyNodes++
+				break
+			}
+		}
+	}
+
+	info["nodes_total"] = len(nodes.Items)
+	info["nodes_ready"] = readyNodes
+
+	// Get all pods
+	pods, err := c.clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	info["pods_total"] = len(pods.Items)
+
+	return info, nil
+}
+
+// IsMetricsServerAvailable checks if metrics-server is available
+func (c *Client) IsMetricsServerAvailable() bool {
+	_, err := c.metricsClient.MetricsV1beta1().NodeMetricses().List(
+		context.TODO(), metav1.ListOptions{Limit: 1})
+	return err == nil
 }

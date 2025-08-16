@@ -33,4 +33,9 @@ func init() {
 	rootCmd.AddCommand(dbCmd)
 	rootCmd.AddCommand(domainCmd)
 	rootCmd.AddCommand(registryCmd)
+	rootCmd.AddCommand(monitorCmd)
+	rootCmd.AddCommand(metricsCmd)
+	rootCmd.AddCommand(healthCmd)
+	rootCmd.AddCommand(alertsCmd)
+	rootCmd.AddCommand(eventsCmd)
 }

@@ -44,6 +44,16 @@ export default defineConfig({
             { text: 'shipyard registry', link: '/cli/registry' },
             { text: 'shipyard domain', link: '/cli/domain' }
           ]
+        },
+        {
+          text: 'Monitoring & Observability',
+          items: [
+            { text: 'shipyard monitor', link: '/cli/monitor' },
+            { text: 'shipyard metrics', link: '/cli/metrics' },
+            { text: 'shipyard health', link: '/cli/health' },
+            { text: 'shipyard alerts', link: '/cli/alerts' },
+            { text: 'shipyard events', link: '/cli/events' }
+          ]
         }
       ],
       '/api/': [

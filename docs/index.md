@@ -27,8 +27,8 @@ features:
     details: Track deployment history with rollback capabilities. Every deployment is versioned and can be restored instantly.
   - title: ⚡ Auto-scaling
     details: Horizontal Pod Autoscaler configuration with CPU-based scaling and resource management out of the box.
-  - title: 🔍 Monitoring & Logs
-    details: Real-time application logs and status monitoring with Kubernetes-native observability.
+  - title: 🔍 Advanced Monitoring
+    details: Comprehensive observability with real-time dashboards, metrics collection, health checks, alerting system, and event tracking.
 ---
 
 ## Why Shipyard?
@@ -74,5 +74,10 @@ shipyard deploy
 # Monitor deployment
 shipyard status
 shipyard logs my-app
+
+# Real-time monitoring & observability
+shipyard monitor my-app
+shipyard health my-app
+shipyard metrics my-app
 ```
 
