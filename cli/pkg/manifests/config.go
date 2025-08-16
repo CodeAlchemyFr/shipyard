@@ -13,6 +13,7 @@ type Config struct {
 	Build     BuildConfig     `yaml:"build,omitempty"`
 	Resources ResourcesConfig `yaml:"resources,omitempty"`
 	Scaling   ScalingConfig   `yaml:"scaling,omitempty"`
+	Health    HealthConfig    `yaml:"health,omitempty"`
 	Env       map[string]string `yaml:"env,omitempty"`
 	Secrets   map[string]string `yaml:"secrets,omitempty"`
 	Addons    []string        `yaml:"addons,omitempty"`
@@ -39,6 +40,18 @@ type ScalingConfig struct {
 	Min       int `yaml:"min,omitempty"`
 	Max       int `yaml:"max,omitempty"`
 	TargetCPU int `yaml:"target_cpu,omitempty"`
+}
+
+type HealthConfig struct {
+	Liveness  ProbeConfig `yaml:"liveness,omitempty"`
+	Readiness ProbeConfig `yaml:"readiness,omitempty"`
+}
+
+type ProbeConfig struct {
+	Path                string `yaml:"path,omitempty"`
+	Port                int    `yaml:"port,omitempty"`
+	InitialDelaySeconds int    `yaml:"initialDelaySeconds,omitempty"`
+	PeriodSeconds       int    `yaml:"periodSeconds,omitempty"`
 }
 
 // LoadConfig loads and parses the paas.yaml configuration file

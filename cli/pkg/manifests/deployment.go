@@ -61,18 +61,36 @@ spec:
           limits:
             cpu: {{ .Resources.CPU }}
             memory: {{ .Resources.Memory }}
+        {{- if .Health.Liveness.Path }}
         livenessProbe:
           httpGet:
-            path: /health
+            path: {{ .Health.Liveness.Path }}
+            port: {{ if .Health.Liveness.Port }}{{ .Health.Liveness.Port }}{{ else }}{{ .App.Port }}{{ end }}
+          initialDelaySeconds: {{ if .Health.Liveness.InitialDelaySeconds }}{{ .Health.Liveness.InitialDelaySeconds }}{{ else }}30{{ end }}
+          periodSeconds: {{ if .Health.Liveness.PeriodSeconds }}{{ .Health.Liveness.PeriodSeconds }}{{ else }}10{{ end }}
+        {{- else }}
+        livenessProbe:
+          httpGet:
+            path: /
             port: {{ .App.Port }}
           initialDelaySeconds: 30
           periodSeconds: 10
+        {{- end }}
+        {{- if .Health.Readiness.Path }}
         readinessProbe:
           httpGet:
-            path: /ready
+            path: {{ .Health.Readiness.Path }}
+            port: {{ if .Health.Readiness.Port }}{{ .Health.Readiness.Port }}{{ else }}{{ .App.Port }}{{ end }}
+          initialDelaySeconds: {{ if .Health.Readiness.InitialDelaySeconds }}{{ .Health.Readiness.InitialDelaySeconds }}{{ else }}5{{ end }}
+          periodSeconds: {{ if .Health.Readiness.PeriodSeconds }}{{ .Health.Readiness.PeriodSeconds }}{{ else }}5{{ end }}
+        {{- else }}
+        readinessProbe:
+          httpGet:
+            path: /
             port: {{ .App.Port }}
           initialDelaySeconds: 5
           periodSeconds: 5
+        {{- end }}
 ---
 {{- if gt .Scaling.Max .Scaling.Min }}
 apiVersion: autoscaling/v2
