@@ -18,7 +18,7 @@ metadata:
     shipyard.version: "{{ .Version.Version }}"
     shipyard.image-tag: "{{ .Version.ImageTag }}"
     shipyard.image-hash: "{{ .Version.ImageHash }}"
-    shipyard.deployed-at: "{{ .Version.Timestamp.Format "2006-01-02T15:04:05Z07:00" }}"
+    shipyard.deployed-at: "{{ .Version.Timestamp.Format "2006-01-02T15-04-05Z07-00" }}"
     {{- if .Version.RollbackTo }}
     shipyard.rollback-from: "{{ .Version.RollbackTo }}"
     {{- end }}
