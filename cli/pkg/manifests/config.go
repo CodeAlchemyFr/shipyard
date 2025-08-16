@@ -14,6 +14,7 @@ type Config struct {
 	Resources ResourcesConfig `yaml:"resources,omitempty"`
 	Scaling   ScalingConfig   `yaml:"scaling,omitempty"`
 	Health    HealthConfig    `yaml:"health,omitempty"`
+	Service   ServiceConfig   `yaml:"service,omitempty"`
 	Env       map[string]string `yaml:"env,omitempty"`
 	Secrets   map[string]string `yaml:"secrets,omitempty"`
 	Addons    []string        `yaml:"addons,omitempty"`
