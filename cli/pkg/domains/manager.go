@@ -109,7 +109,7 @@ func (m *Manager) RemoveDomain(appName, hostname string) error {
 // GetDomainsForApp returns all domains for a specific app
 func (m *Manager) GetDomainsForApp(appName string) ([]Domain, error) {
 	query := `
-		SELECT id, app_id, hostname, base_domain, path, ssl_enabled, created_at, updated_at
+		SELECT id, hostname, base_domain, path, ssl_enabled, created_at, updated_at
 		FROM domain_overview
 		WHERE app_name = ?
 		ORDER BY hostname`
@@ -125,7 +125,6 @@ func (m *Manager) GetDomainsForApp(appName string) ([]Domain, error) {
 		var domain Domain
 		err := rows.Scan(
 			&domain.ID,
-			&domain.AppID,
 			&domain.Hostname,
 			&domain.BaseDomain,
 			&domain.Path,
@@ -137,6 +136,11 @@ func (m *Manager) GetDomainsForApp(appName string) ([]Domain, error) {
 			return nil, fmt.Errorf("failed to scan domain row: %w", err)
 		}
 		domain.AppName = appName
+		// We need to get app_id for the domain struct - let's get it from the apps table
+		err = m.db.GetConnection().QueryRow("SELECT id FROM apps WHERE name = ?", appName).Scan(&domain.AppID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get app_id for app %s: %w", appName, err)
+		}
 		domains = append(domains, domain)
 	}
 
@@ -150,9 +154,10 @@ func (m *Manager) GetDomainsForApp(appName string) ([]Domain, error) {
 // GetAllDomains returns all domains grouped by base domain
 func (m *Manager) GetAllDomains() ([]DomainGroup, error) {
 	query := `
-		SELECT id, app_name, hostname, base_domain, path, ssl_enabled, created_at, updated_at
-		FROM domain_overview
-		ORDER BY base_domain, hostname`
+		SELECT d.id, a.name as app_name, d.hostname, d.base_domain, d.path, d.ssl_enabled, d.created_at, d.updated_at, a.id as app_id
+		FROM domains d
+		JOIN apps a ON d.app_id = a.id
+		ORDER BY d.base_domain, d.hostname`
 
 	rows, err := m.db.GetConnection().Query(query)
 	if err != nil {
@@ -172,6 +177,7 @@ func (m *Manager) GetAllDomains() ([]DomainGroup, error) {
 			&domain.SSLEnabled,
 			&domain.CreatedAt,
 			&domain.UpdatedAt,
+			&domain.AppID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan domain row: %w", err)
@@ -199,10 +205,11 @@ func (m *Manager) GetAllDomains() ([]DomainGroup, error) {
 // GetDomainsByBaseDomain returns all domains for a specific base domain
 func (m *Manager) GetDomainsByBaseDomain(baseDomain string) ([]Domain, error) {
 	query := `
-		SELECT id, app_name, hostname, base_domain, path, ssl_enabled, created_at, updated_at
-		FROM domain_overview
-		WHERE base_domain = ?
-		ORDER BY hostname`
+		SELECT d.id, a.name as app_name, d.hostname, d.base_domain, d.path, d.ssl_enabled, d.created_at, d.updated_at, a.id as app_id
+		FROM domains d
+		JOIN apps a ON d.app_id = a.id
+		WHERE d.base_domain = ?
+		ORDER BY d.hostname`
 
 	rows, err := m.db.GetConnection().Query(query, baseDomain)
 	if err != nil {
@@ -222,6 +229,7 @@ func (m *Manager) GetDomainsByBaseDomain(baseDomain string) ([]Domain, error) {
 			&domain.SSLEnabled,
 			&domain.CreatedAt,
 			&domain.UpdatedAt,
+			&domain.AppID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan domain row: %w", err)

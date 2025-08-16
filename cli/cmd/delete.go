@@ -146,6 +146,10 @@ func deleteAllApps() error {
 		}
 	}
 
+	// Clean up empty directories after deleting all apps
+	fmt.Printf("🧹 Cleaning up empty directories...\n")
+	cleanupEmptyDirectories("manifests")
+	
 	fmt.Printf("✅ Successfully deleted %d applications\n", deletedCount)
 	return nil
 }
@@ -209,5 +213,43 @@ func deleteManifestFiles(appName string) error {
 	}
 
 	fmt.Printf("✅ Deleted manifest directory: %s\n", manifestDir)
+	
+	// Clean up empty parent directories
+	cleanupEmptyDirectories("manifests")
+	
 	return nil
+}
+
+// cleanupEmptyDirectories removes empty directories recursively starting from the given path
+func cleanupEmptyDirectories(startPath string) {
+	// Check if the directory exists
+	if _, err := os.Stat(startPath); os.IsNotExist(err) {
+		return
+	}
+
+	// Read the directory contents
+	entries, err := os.ReadDir(startPath)
+	if err != nil {
+		return
+	}
+
+	// Recursively clean subdirectories first
+	for _, entry := range entries {
+		if entry.IsDir() {
+			subPath := fmt.Sprintf("%s/%s", startPath, entry.Name())
+			cleanupEmptyDirectories(subPath)
+		}
+	}
+
+	// Re-read directory contents after cleaning subdirectories
+	entries, err = os.ReadDir(startPath)
+	if err != nil {
+		return
+	}
+
+	// If directory is now empty, remove it (but not the root manifests directory)
+	if len(entries) == 0 && startPath != "manifests" {
+		fmt.Printf("🧹 Removing empty directory: %s\n", startPath)
+		os.Remove(startPath)
+	}
 }
