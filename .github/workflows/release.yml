@@ -177,6 +177,37 @@ jobs:
                 
                 echo -e "${GREEN}✅ k3s installed and configured successfully!${NC}"
                 echo -e "${BLUE}📋 k3s cluster info: $(k3s kubectl cluster-info | head -1)${NC}"
+                
+                # Install cert-manager for SSL certificates
+                echo -e "${BLUE}🔐 Installing cert-manager for SSL certificates...${NC}"
+                kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+                
+                # Wait for cert-manager to be ready
+                echo -e "${YELLOW}⏳ Waiting for cert-manager to be ready...${NC}"
+                kubectl wait --for=condition=ready pod -l app=cert-manager -n cert-manager --timeout=120s 2>/dev/null || true
+                kubectl wait --for=condition=ready pod -l app=cainjector -n cert-manager --timeout=120s 2>/dev/null || true
+                kubectl wait --for=condition=ready pod -l app=webhook -n cert-manager --timeout=120s 2>/dev/null || true
+                
+                # Create Let's Encrypt ClusterIssuer
+                echo -e "${BLUE}📄 Creating Let's Encrypt ClusterIssuer...${NC}"
+                cat <<ISSUER_EOF | kubectl apply -f -
+          apiVersion: cert-manager.io/v1
+          kind: ClusterIssuer
+          metadata:
+            name: letsencrypt-prod
+          spec:
+            acme:
+              server: https://acme-v02.api.letsencrypt.org/directory
+              email: admin@shipyard.local
+              privateKeySecretRef:
+                name: letsencrypt-prod
+              solvers:
+              - http01:
+                  ingress:
+                    class: traefik
+          ISSUER_EOF
+                
+                echo -e "${GREEN}✅ SSL stack (cert-manager + ClusterIssuer) installed successfully!${NC}"
               elif [ "$OS" = "darwin" ]; then
                 echo -e "${YELLOW}🍎 On macOS, k3s must run in Docker. Installing k3d instead...${NC}"
                 
