@@ -4,13 +4,20 @@
 
 ### Prerequisites
 
-Before installing Shipyard, ensure you have:
+Choose one of the following options:
 
+#### Option 1: Automatic k3s Installation (Recommended for Development)
+- **Operating System** - Linux, macOS, or Windows
+- **Docker** - Required for macOS and Windows (for k3d)
+
+#### Option 2: Existing Kubernetes Cluster
 - **Kubernetes cluster** - Access to a Kubernetes cluster (local or cloud)
 - **kubectl** - Kubernetes command-line tool configured
 - **metrics-server** - For CPU/memory metrics collection (recommended for monitoring)
 
-### Quick Install (Recommended)
+### Quick Install with k3s (Recommended)
+
+This is the fastest way to get started with Shipyard, including a complete Kubernetes environment.
 
 #### macOS & Linux
 
@@ -18,16 +25,29 @@ Before installing Shipyard, ensure you have:
 curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
 ```
 
-The script automatically detects:
-- **Operating System** (macOS/Linux)
-- **Architecture** (Intel x86_64, Apple Silicon arm64, Linux arm64)
-- **Downloads** the correct binary for your system
-- **Installs** to `/usr/local/bin/shipyard`
+**What gets installed:**
+- **Shipyard CLI** - The main CLI tool
+- **k3s** (Linux) or **k3d** (macOS) - Lightweight Kubernetes distribution
+- **kubectl** configuration - Automatically configured to work with your cluster
 
 #### Windows (PowerShell)
 
 ```powershell
 Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
+```
+
+**Requirements for Windows:** Docker Desktop must be installed and running.
+
+#### Install Shipyard Only (Skip k3s)
+
+If you already have a Kubernetes cluster configured:
+
+```bash
+# macOS & Linux
+INSTALL_K3S=false curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
+
+# Windows PowerShell
+$env:INSTALL_K3S="false"; Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
 ```
 
 ### Package Managers
@@ -125,14 +145,30 @@ You should see the Shipyard CLI help output.
 
 ## Kubernetes Setup
 
-Shipyard works with any Kubernetes cluster:
+### Automatic Setup (k3s Integration)
 
-### Local Development
+If you used the quick install, your Kubernetes cluster is already configured and ready to use:
+
+```bash
+# Verify your cluster is running
+kubectl cluster-info
+
+# Check cluster nodes
+kubectl get nodes
+```
+
+### Manual Kubernetes Setup
+
+If you installed Shipyard without k3s, you can connect to any Kubernetes cluster:
+
+#### Local Development Options
+- **k3s** - `curl -sfL https://get.k3s.io | sh -` (Linux)
+- **k3d** - `k3d cluster create myregistry` (macOS/Windows with Docker)
 - **minikube** - `minikube start`
 - **kind** - `kind create cluster`
 - **Docker Desktop** - Enable Kubernetes in settings
 
-### Cloud Providers
+#### Cloud Providers
 - **Google GKE** - `gcloud container clusters get-credentials`
 - **AWS EKS** - `aws eks update-kubeconfig`
 - **Azure AKS** - `az aks get-credentials`

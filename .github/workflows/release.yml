@@ -80,12 +80,13 @@ jobs:
           #!/bin/bash
           set -e
           
-          # Shipyard CLI Installer
+          # Shipyard CLI Installer with k3s
           # Usage: curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
           
           REPO="CodeAlchemyFr/shipyard"
           INSTALL_DIR="/usr/local/bin"
           BINARY_NAME="shipyard"
+          INSTALL_K3S=${INSTALL_K3S:-true}
           
           # Colors for output
           RED='\033[0;31m'
@@ -94,7 +95,7 @@ jobs:
           BLUE='\033[0;34m'
           NC='\033[0m' # No Color
           
-          echo -e "${BLUE}🚀 Installing Shipyard CLI...${NC}"
+          echo -e "${BLUE}🚀 Installing Shipyard CLI with k3s...${NC}"
           
           # Detect OS and architecture
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -150,6 +151,54 @@ jobs:
           fi
           
           echo -e "${GREEN}✅ Shipyard CLI installed successfully!${NC}"
+          
+          # Install k3s if requested
+          if [ "$INSTALL_K3S" = "true" ]; then
+            echo -e "${BLUE}🐳 Installing k3s...${NC}"
+            
+            # Check if k3s is already installed
+            if command -v k3s >/dev/null 2>&1; then
+              echo -e "${YELLOW}⚠️  k3s is already installed: $(k3s --version | head -1)${NC}"
+            else
+              # Install k3s
+              if [ "$OS" = "linux" ]; then
+                echo -e "${YELLOW}📦 Downloading k3s installer...${NC}"
+                curl -sfL https://get.k3s.io | sh -
+                
+                # Wait for k3s to be ready
+                echo -e "${YELLOW}⏳ Waiting for k3s to be ready...${NC}"
+                sudo k3s kubectl wait --for=condition=ready node --all --timeout=60s 2>/dev/null || true
+                
+                # Set up kubeconfig for current user
+                mkdir -p ~/.kube
+                sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+                sudo chown $(id -u):$(id -g) ~/.kube/config
+                export KUBECONFIG=~/.kube/config
+                
+                echo -e "${GREEN}✅ k3s installed and configured successfully!${NC}"
+                echo -e "${BLUE}📋 k3s cluster info: $(k3s kubectl cluster-info | head -1)${NC}"
+              elif [ "$OS" = "darwin" ]; then
+                echo -e "${YELLOW}🍎 On macOS, k3s must run in Docker. Installing k3d instead...${NC}"
+                
+                # Install k3d (k3s in docker)
+                if command -v docker >/dev/null 2>&1; then
+                  curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+                  
+                  # Create a k3s cluster
+                  k3d cluster create shipyard --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
+                  
+                  echo -e "${GREEN}✅ k3d cluster 'shipyard' created successfully!${NC}"
+                  echo -e "${BLUE}📋 Access your cluster with: kubectl cluster-info${NC}"
+                else
+                  echo -e "${RED}❌ Docker is required for k3s on macOS. Please install Docker first.${NC}"
+                  echo -e "${YELLOW}📚 Install Docker: https://docs.docker.com/desktop/mac/install/${NC}"
+                fi
+              fi
+            fi
+          else
+            echo -e "${YELLOW}⏭️  Skipping k3s installation (set INSTALL_K3S=false to disable)${NC}"
+          fi
+          
           echo -e "${BLUE}📖 Get started with: shipyard --help${NC}"
           echo -e "${BLUE}📚 Documentation: https://codealchemy.github.io/shipyard/${NC}"
           
@@ -163,7 +212,7 @@ jobs:
           
           # Create install script for Windows (PowerShell)
           cat > install.ps1 << 'EOF'
-          # Shipyard CLI Installer for Windows
+          # Shipyard CLI Installer for Windows with k3s
           # Usage: Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
           
           $ErrorActionPreference = "Stop"
@@ -171,8 +220,9 @@ jobs:
           $REPO = "CodeAlchemyFr/shipyard"
           $INSTALL_DIR = "$env:USERPROFILE\bin"
           $BINARY_NAME = "shipyard.exe"
+          $INSTALL_K3S = if ($env:INSTALL_K3S) { $env:INSTALL_K3S } else { "true" }
           
-          Write-Host "🚀 Installing Shipyard CLI..." -ForegroundColor Blue
+          Write-Host "🚀 Installing Shipyard CLI with k3s..." -ForegroundColor Blue
           
           # Detect architecture
           $ARCH = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
@@ -195,6 +245,59 @@ jobs:
               Invoke-WebRequest -Uri $BINARY_URL -OutFile $BINARY_PATH
               
               Write-Host "✅ Shipyard CLI installed successfully!" -ForegroundColor Green
+              
+              # Install k3s if requested
+              if ($INSTALL_K3S -eq "true") {
+                  Write-Host "🐳 Installing k3s on Windows..." -ForegroundColor Blue
+                  
+                  # Check if Docker Desktop is running
+                  $dockerRunning = $false
+                  try {
+                      docker info | Out-Null
+                      $dockerRunning = $true
+                  } catch {
+                      $dockerRunning = $false
+                  }
+                  
+                  if ($dockerRunning) {
+                      # Check if k3d is already installed
+                      $k3dInstalled = $false
+                      try {
+                          k3d version | Out-Null
+                          $k3dInstalled = $true
+                          Write-Host "⚠️ k3d is already installed" -ForegroundColor Yellow
+                      } catch {
+                          Write-Host "📦 Installing k3d (k3s in Docker)..." -ForegroundColor Yellow
+                          
+                          # Download and install k3d
+                          $k3dUrl = "https://github.com/k3d-io/k3d/releases/latest/download/k3d-windows-amd64.exe"
+                          $k3dPath = Join-Path $INSTALL_DIR "k3d.exe"
+                          Invoke-WebRequest -Uri $k3dUrl -OutFile $k3dPath
+                          
+                          Write-Host "✅ k3d installed successfully!" -ForegroundColor Green
+                          $k3dInstalled = $true
+                      }
+                      
+                      if ($k3dInstalled) {
+                          # Create k3s cluster
+                          Write-Host "🏗️ Creating k3s cluster 'shipyard'..." -ForegroundColor Yellow
+                          try {
+                              & k3d cluster create shipyard --port "8080:80@loadbalancer" --port "8443:443@loadbalancer" 2>$null
+                              Write-Host "✅ k3d cluster 'shipyard' created successfully!" -ForegroundColor Green
+                              Write-Host "📋 Access your cluster with: kubectl cluster-info" -ForegroundColor Blue
+                          } catch {
+                              Write-Host "⚠️ k3s cluster may already exist or Docker needs restart" -ForegroundColor Yellow
+                          }
+                      }
+                  } else {
+                      Write-Host "❌ Docker Desktop is required for k3s on Windows." -ForegroundColor Red
+                      Write-Host "📚 Please install Docker Desktop: https://docs.docker.com/desktop/windows/install/" -ForegroundColor Yellow
+                      Write-Host "🔄 After installing Docker, rerun this script to install k3s" -ForegroundColor Yellow
+                  }
+              } else {
+                  Write-Host "⏭️ Skipping k3s installation (set `$env:INSTALL_K3S=`"false`" to disable)" -ForegroundColor Yellow
+              }
+              
               Write-Host "📖 Get started with: shipyard --help" -ForegroundColor Blue
               Write-Host "📚 Documentation: https://codealchemy.github.io/shipyard/" -ForegroundColor Blue
               
@@ -233,14 +336,23 @@ jobs:
             
             ### Installation
             
-            #### Quick Install (Linux/macOS)
+            #### Quick Install with k3s (Linux/macOS)
             ```bash
             curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
             ```
             
-            #### Quick Install (Windows PowerShell)
+            #### Quick Install with k3s (Windows PowerShell)
             ```powershell
             Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
+            ```
+            
+            #### Install without k3s
+            ```bash
+            # Linux/macOS
+            INSTALL_K3S=false curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
+            
+            # Windows PowerShell
+            $env:INSTALL_K3S="false"; Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
             ```
             
             #### Manual Installation
