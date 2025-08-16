@@ -31,7 +31,7 @@ func NewDB() (*DB, error) {
 	dbPath := filepath.Join(manifestsDir, "shipyard.db")
 
 	// Open database connection
-	conn, err := sql.Open("sqlite3", dbPath)
+	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
