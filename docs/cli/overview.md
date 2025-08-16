@@ -15,6 +15,7 @@ All commands support these global flags:
 | Command | Description |
 |---------|-------------|
 | [`deploy`](/cli/deploy) | Deploy an application to Kubernetes |
+| [`delete`](/cli/delete) | Delete an application and all its resources |
 | [`status`](/cli/status) | Show status of deployed applications |
 | [`logs`](/cli/logs) | View application logs |
 | [`rollback`](/cli/rollback) | Rollback to a previous deployment |
@@ -50,6 +51,9 @@ shipyard deploy
 
 # 6. Rollback if needed
 shipyard rollback
+
+# 7. Clean up when done
+shipyard delete
 ```
 
 ## Configuration File
@@ -100,6 +104,16 @@ shipyard rollback v1703123456
 ### Add custom domain
 ```bash
 shipyard domain add web-app.example.com
+```
+
+### Clean up application
+```bash
+shipyard delete web-app
+```
+
+### Remove all applications
+```bash
+shipyard delete --all
 ```
 
 ## Getting Help

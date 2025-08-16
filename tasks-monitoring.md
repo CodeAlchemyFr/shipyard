@@ -17,7 +17,10 @@ Ajouter des capacités de surveillance et monitoring directement dans le CLI Shi
 #### `shipyard monitor`
 **Surveillance temps réel multi-applications**
 ```bash
-shipyard monitor                    # Toutes les apps
+shipyard monitor                    # Toutes les appstest_shipyard_1@instance-20250816-142117:~/apps$ kubectl get service hello-world
+NAME          TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+hello-world   ClusterIP   10.43.29.194   <none>        80/TCP    6m11s
+test_shipyard_1@instance-20250816-142117:~/apps$ 
 shipyard monitor my-app             # App spécifique
 shipyard monitor --interval 5s     # Rafraîchissement custom
 shipyard monitor --alerts-only     # Seulement les alertes

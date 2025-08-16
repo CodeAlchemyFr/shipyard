@@ -479,3 +479,136 @@ func (c *Client) IsMetricsServerAvailable() bool {
 		context.TODO(), metav1.ListOptions{Limit: 1})
 	return err == nil
 }
+
+// DeleteManifests deletes all manifests for an application
+func (c *Client) DeleteManifests(appName string) error {
+	appDir := filepath.Join("manifests", "apps", appName)
+	
+	// Delete app manifests
+	if err := c.deleteManifestsFromDir(appDir); err != nil {
+		return fmt.Errorf("failed to delete app manifests: %w", err)
+	}
+
+	return nil
+}
+
+// deleteManifestsFromDir deletes all resources defined in YAML files in a directory
+func (c *Client) deleteManifestsFromDir(dir string) error {
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // Directory doesn't exist, skip
+		}
+		return fmt.Errorf("failed to read directory %s: %w", dir, err)
+	}
+
+	// Delete in reverse order to handle dependencies
+	for i := len(files) - 1; i >= 0; i-- {
+		file := files[i]
+		if !strings.HasSuffix(file.Name(), ".yaml") && !strings.HasSuffix(file.Name(), ".yml") {
+			continue
+		}
+
+		filePath := filepath.Join(dir, file.Name())
+		if err := c.deleteManifest(filePath); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to delete %s: %v\n", filePath, err)
+			continue // Continue with other files
+		}
+		
+		fmt.Printf("🗑️  Deleted: %s\n", filePath)
+	}
+
+	return nil
+}
+
+// deleteManifest deletes a single YAML manifest file
+func (c *Client) deleteManifest(filename string) error {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("failed to read manifest file: %w", err)
+	}
+
+	// Handle multiple documents in one file
+	documents := strings.Split(string(data), "---")
+	
+	for _, doc := range documents {
+		doc = strings.TrimSpace(doc)
+		if doc == "" {
+			continue
+		}
+
+		if err := c.deleteYAMLDocument([]byte(doc)); err != nil {
+			return fmt.Errorf("failed to delete document: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// deleteYAMLDocument deletes a single YAML document
+func (c *Client) deleteYAMLDocument(data []byte) error {
+	// Decode YAML to unstructured object
+	decoder := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+	obj := &unstructured.Unstructured{}
+	
+	if _, _, err := decoder.Decode(data, nil, obj); err != nil {
+		return fmt.Errorf("failed to decode YAML: %w", err)
+	}
+
+	// Set namespace if not specified
+	if obj.GetNamespace() == "" {
+		obj.SetNamespace(c.namespace)
+	}
+
+	// Get GVR for the object
+	gvr, err := c.getGVRForObject(obj)
+	if err != nil {
+		return fmt.Errorf("failed to get GVR: %w", err)
+	}
+
+	// Delete the resource
+	err = c.dynamicClient.Resource(gvr).Namespace(obj.GetNamespace()).Delete(
+		context.TODO(), obj.GetName(), metav1.DeleteOptions{})
+	
+	if errors.IsNotFound(err) {
+		// Resource already deleted, that's fine
+		return nil
+	}
+	
+	return err
+}
+
+// DeleteResourcesByApp deletes all resources for an app by label selector
+func (c *Client) DeleteResourcesByApp(appName string) error {
+	labelSelector := fmt.Sprintf("app=%s", appName)
+	
+	// Delete common resource types
+	resourceTypes := []struct {
+		resource string
+		gvr      schema.GroupVersionResource
+	}{
+		{"deployments", schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}},
+		{"services", schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}},
+		{"secrets", schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}},
+		{"configmaps", schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}},
+		{"ingresses", schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}},
+		{"horizontalpodautoscalers", schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}},
+	}
+
+	for _, rt := range resourceTypes {
+		if err := c.deleteResourcesByLabel(rt.gvr, labelSelector); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to delete %s: %v\n", rt.resource, err)
+		}
+	}
+
+	return nil
+}
+
+// deleteResourcesByLabel deletes resources by label selector
+func (c *Client) deleteResourcesByLabel(gvr schema.GroupVersionResource, labelSelector string) error {
+	return c.dynamicClient.Resource(gvr).Namespace(c.namespace).DeleteCollection(
+		context.TODO(),
+		metav1.DeleteOptions{},
+		metav1.ListOptions{LabelSelector: labelSelector},
+	)
+}

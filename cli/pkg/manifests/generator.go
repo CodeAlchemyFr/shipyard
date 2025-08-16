@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/shipyard/cli/pkg/k8s"
 )
 
 // Generator handles the generation of Kubernetes manifests
@@ -74,5 +76,23 @@ func (g *Generator) GenerateAppManifests() error {
 func (g *Generator) UpdateIngressManifests() error {
 	// Use new database-based ingress generation
 	return g.UpdateIngressFromDatabase(g.config.App.Name)
+}
+
+// CreateK8sClient creates a new Kubernetes client
+func CreateK8sClient() (*k8s.Client, error) {
+	return k8s.NewClient()
+}
+
+// DeleteManifestsFromDirectory deletes all Kubernetes resources from manifest files in a directory
+func DeleteManifestsFromDirectory(client *k8s.Client, directory string) error {
+	if client == nil {
+		return fmt.Errorf("client is nil")
+	}
+	
+	// Extract app name from directory path
+	appName := filepath.Base(directory)
+	
+	// Use the client's delete method
+	return client.DeleteManifests(appName)
 }
 

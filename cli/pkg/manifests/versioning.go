@@ -467,3 +467,52 @@ func extractImageTag(image string) string {
 	}
 	return "latest"
 }
+
+// DeleteApp removes an application and all its data from the database
+func (vm *VersionManager) DeleteApp() error {
+	// Start a transaction
+	tx, err := vm.db.BeginTx()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Get app ID
+	var appID int64
+	err = tx.QueryRow("SELECT id FROM apps WHERE name = ?", vm.appName).Scan(&appID)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			// App doesn't exist, nothing to delete
+			return nil
+		}
+		return fmt.Errorf("failed to get app ID: %w", err)
+	}
+
+	// Delete related records (foreign keys should handle this, but being explicit)
+	tables := []string{
+		"deployments", 
+		"domains", 
+		"metrics", 
+		"health_checks", 
+		"events",
+	}
+
+	for _, table := range tables {
+		query := fmt.Sprintf("DELETE FROM %s WHERE app_id = ?", table)
+		if _, err := tx.Exec(query, appID); err != nil {
+			return fmt.Errorf("failed to delete from %s: %w", table, err)
+		}
+	}
+
+	// Finally delete the app itself
+	if _, err := tx.Exec("DELETE FROM apps WHERE id = ?", appID); err != nil {
+		return fmt.Errorf("failed to delete app: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
