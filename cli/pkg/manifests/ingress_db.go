@@ -17,15 +17,22 @@ metadata:
     managed-by: shipyard
     base-domain: {{ .BaseDomain }}
   annotations:
+    # Traefik annotations (k3s default ingress controller)
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Cert-manager annotations (if cert-manager is installed)
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Nginx annotations (if nginx-ingress is used instead of Traefik)
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
+  {{- if .SSLEnabled }}
   tls:
   - hosts:
     {{- range .Domains }}
     - {{ .Hostname }}
     {{- end }}
     secretName: {{ .BaseDomain }}-tls
+  {{- end }}
   rules:
   {{- range .Domains }}
   - host: {{ .Hostname }}
@@ -88,13 +95,24 @@ func (g *Generator) GenerateIngressFromDatabase() error {
 
 // generateIngressFileFromDomains creates an ingress file from domain list
 func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain string, domainList []domains.Domain) error {
+	// Check if any domain has SSL enabled
+	sslEnabled := false
+	for _, domain := range domainList {
+		if domain.SSLEnabled {
+			sslEnabled = true
+			break
+		}
+	}
+
 	// Prepare template data
 	ingressData := struct {
 		BaseDomain string
 		Domains    []domains.Domain
+		SSLEnabled bool
 	}{
 		BaseDomain: baseDomain,
 		Domains:    domainList,
+		SSLEnabled: sslEnabled,
 	}
 
 	tmpl, err := template.New("ingress").Parse(ingressTemplateDomain)
