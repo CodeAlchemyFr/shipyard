@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -71,9 +72,12 @@ func runInstallSSL() {
 	if isClusterIssuerInstalled() {
 		fmt.Println("✅ Let's Encrypt ClusterIssuer already exists")
 	} else {
+		// Ask for email
+		email := askForEmail()
+		
 		// Create ClusterIssuer
 		fmt.Println("📄 Creating Let's Encrypt ClusterIssuer...")
-		if err := createClusterIssuer(); err != nil {
+		if err := createClusterIssuer(email); err != nil {
 			fmt.Printf("❌ Failed to create ClusterIssuer: %v\n", err)
 			os.Exit(1)
 		}
@@ -128,22 +132,37 @@ func isClusterIssuerInstalled() bool {
 	return cmd.Run() == nil
 }
 
-func createClusterIssuer() error {
-	clusterIssuerYAML := `apiVersion: cert-manager.io/v1
+func askForEmail() string {
+	fmt.Print("📧 Enter your email address for Let's Encrypt certificates: ")
+	reader := bufio.NewReader(os.Stdin)
+	email, _ := reader.ReadString('\n')
+	email = strings.TrimSpace(email)
+	
+	// Basic email validation
+	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
+		fmt.Println("⚠️  Invalid email format. Please try again.")
+		return askForEmail()
+	}
+	
+	return email
+}
+
+func createClusterIssuer(email string) error {
+	clusterIssuerYAML := fmt.Sprintf(`apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: letsencrypt-prod
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@shipyard.local
+    email: %s
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
     - http01:
         ingress:
           class: traefik
-`
+`, email)
 
 	cmd := exec.Command("kubectl", "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(clusterIssuerYAML)

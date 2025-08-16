@@ -190,6 +190,8 @@ jobs:
                 
                 # Create Let's Encrypt ClusterIssuer
                 echo -e "${BLUE}📄 Creating Let's Encrypt ClusterIssuer...${NC}"
+                echo -e "${YELLOW}📧 Please provide an email for Let's Encrypt certificates:${NC}"
+                read -p "Email: " SSL_EMAIL
                 cat <<ISSUER_EOF | kubectl apply -f -
           apiVersion: cert-manager.io/v1
           kind: ClusterIssuer
@@ -198,7 +200,7 @@ jobs:
           spec:
             acme:
               server: https://acme-v02.api.letsencrypt.org/directory
-              email: admin@shipyard.local
+              email: \${SSL_EMAIL}
               privateKeySecretRef:
                 name: letsencrypt-prod
               solvers:
