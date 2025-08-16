@@ -15,12 +15,15 @@ metadata:
     app: {{ .App.Name }}
     managed-by: shipyard
 spec:
-  type: ClusterIP
+  type: {{ if .Service.Type }}{{ .Service.Type }}{{ else }}ClusterIP{{ end }}
   ports:
-  - port: 80
+  - port: {{ .App.Port }}
     targetPort: {{ .App.Port }}
     protocol: TCP
     name: http
+    {{- if and .Service.ExternalPort (eq .Service.Type "NodePort") }}
+    nodePort: {{ .Service.ExternalPort }}
+    {{- end }}
   selector:
     app: {{ .App.Name }}
 `

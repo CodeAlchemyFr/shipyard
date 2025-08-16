@@ -10,6 +10,10 @@ app:
   image: string             # Required: Container image
   port: number              # Required: Container port
 
+service:                    # Optional: Service configuration
+  type: string              # ClusterIP, NodePort, LoadBalancer
+  externalPort: number      # External port (for NodePort)
+
 env:                        # Optional: Environment variables
   KEY: "value"
 
@@ -24,6 +28,18 @@ scaling:                    # Optional: Auto-scaling configuration
   min: number
   max: number
   target_cpu: number
+
+health:                     # Optional: Health check configuration
+  liveness:
+    path: string
+    port: number
+    initialDelaySeconds: number
+    periodSeconds: number
+  readiness:
+    path: string
+    port: number
+    initialDelaySeconds: number
+    periodSeconds: number
 
 domains:                    # Optional: Custom domains
   - hostname: string
@@ -53,6 +69,103 @@ app:
 - Docker Hub: `username/repository:tag`  
 - GitHub Container Registry: `ghcr.io/user/repo:tag`
 - Private registries: `my-registry.com/image:tag`
+
+## Service Configuration
+
+### service (Optional)
+
+Configure how your application is exposed within and outside the Kubernetes cluster:
+
+```yaml
+service:
+  type: NodePort            # Service type
+  externalPort: 30080       # External port for NodePort
+```
+
+**Fields:**
+
+- `type` (string, optional) - Kubernetes service type. Default: `ClusterIP`
+  - `ClusterIP` - Internal cluster access only
+  - `NodePort` - External access via node port (30000-32767)
+  - `LoadBalancer` - External access via cloud load balancer
+
+- `externalPort` (number, optional) - External port for NodePort service type
+  - Must be in range 30000-32767
+  - If not specified, Kubernetes auto-assigns a port
+  - Only used when `type: NodePort`
+
+**Service Types Explained:**
+
+```yaml
+# Internal access only (default)
+service:
+  type: ClusterIP
+
+# External access via node port
+service:
+  type: NodePort
+  externalPort: 30080
+
+# External access via cloud load balancer
+service:
+  type: LoadBalancer
+```
+
+**Port Logic:**
+
+- **Container Port** (`app.port`): Port your application listens on inside the container
+- **Service Port**: Always matches `app.port` for simplicity  
+- **External Port** (`service.externalPort`): Port accessible from outside the cluster
+
+**Example with nginx:**
+
+```yaml
+app:
+  name: web-server
+  image: nginx:latest
+  port: 80                  # nginx listens on port 80
+
+service:
+  type: NodePort
+  externalPort: 30080       # Accessible at http://your-server:30080
+```
+
+The generated service will route: `External:30080 → Service:80 → Container:80`
+
+## Health Checks
+
+### health (Optional)
+
+Configure health checks for your application:
+
+```yaml
+health:
+  liveness:
+    path: /health           # Health check endpoint
+    port: 80               # Port to check (usually app.port)
+    initialDelaySeconds: 30 # Wait before first check
+    periodSeconds: 10       # Check interval
+  readiness:
+    path: /ready            # Readiness check endpoint  
+    port: 80               # Port to check
+    initialDelaySeconds: 5  # Wait before first check
+    periodSeconds: 5        # Check interval
+```
+
+**Fields:**
+
+- `liveness` - Determines if container should be restarted
+- `readiness` - Determines if container should receive traffic
+- `path` - HTTP path to check (e.g., `/health`, `/`, `/api/status`)
+- `port` - Port to check (typically same as `app.port`)
+- `initialDelaySeconds` - Delay before first check
+- `periodSeconds` - How often to check
+
+**Default Behavior:**
+
+If health checks are not specified, Shipyard uses sensible defaults:
+- Liveness: `GET /` on `app.port` after 30s, every 10s
+- Readiness: `GET /` on `app.port` after 5s, every 5s
 
 ## Environment Variables
 
@@ -291,3 +404,110 @@ Use proper formats: `100m`, `1`, `2`.
 Error: hostname app.example.com already exists
 ```
 Each hostname can only belong to one application.
+
+## Complete Examples
+
+### Web Application with External Access
+
+```yaml
+app:
+  name: web-app
+  image: nginx:latest
+  port: 80
+
+service:
+  type: NodePort
+  externalPort: 30080
+
+env:
+  ENVIRONMENT: production
+
+resources:
+  cpu: "200m"
+  memory: "256Mi"
+
+scaling:
+  min: 2
+  max: 5
+  target_cpu: 70
+
+health:
+  liveness:
+    path: /
+    port: 80
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readiness:
+    path: /
+    port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 5
+```
+
+### API Service with Custom Health Checks
+
+```yaml
+app:
+  name: api-server
+  image: myregistry.com/api:v1.2.0
+  port: 3000
+
+service:
+  type: NodePort
+  externalPort: 30443
+
+env:
+  NODE_ENV: production
+  API_VERSION: v1.2.0
+
+secrets:
+  DATABASE_URL: postgresql://user:pass@db:5432/myapp
+  JWT_SECRET: your-secret-key
+
+resources:
+  cpu: "500m"
+  memory: "512Mi"
+
+scaling:
+  min: 3
+  max: 10
+  target_cpu: 60
+
+health:
+  liveness:
+    path: /api/health
+    port: 3000
+    initialDelaySeconds: 45
+    periodSeconds: 15
+  readiness:
+    path: /api/ready
+    port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+```
+
+### Internal Service (No External Access)
+
+```yaml
+app:
+  name: background-worker
+  image: worker:latest
+  port: 8080
+
+# No service section = ClusterIP (internal only)
+
+env:
+  WORKER_CONCURRENCY: "4"
+  QUEUE_URL: redis://redis:6379
+
+resources:
+  cpu: "100m"
+  memory: "128Mi"
+
+scaling:
+  min: 1
+  max: 3
+  target_cpu: 80
+```
+
+This creates a service only accessible within the cluster, perfect for background workers or internal APIs.

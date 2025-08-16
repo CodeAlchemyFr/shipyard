@@ -185,10 +185,29 @@ func deleteKubernetesResources(appName string) error {
 func deleteManifestFiles(appName string) error {
 	manifestDir := fmt.Sprintf("manifests/apps/%s", appName)
 	
+	// Check if directory exists
 	if _, err := os.Stat(manifestDir); os.IsNotExist(err) {
 		fmt.Printf("ℹ️  No manifest files found for %s\n", appName)
 		return nil
 	}
 
-	return os.RemoveAll(manifestDir)
+	// Show what we're about to delete
+	fmt.Printf("🗑️  Deleting manifest directory: %s\n", manifestDir)
+	
+	// List files being deleted for debug
+	files, err := os.ReadDir(manifestDir)
+	if err == nil {
+		for _, file := range files {
+			fmt.Printf("   - %s\n", file.Name())
+		}
+	}
+
+	// Remove the directory
+	err = os.RemoveAll(manifestDir)
+	if err != nil {
+		return fmt.Errorf("failed to remove directory %s: %w", manifestDir, err)
+	}
+
+	fmt.Printf("✅ Deleted manifest directory: %s\n", manifestDir)
+	return nil
 }

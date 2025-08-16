@@ -54,6 +54,11 @@ type ProbeConfig struct {
 	PeriodSeconds       int    `yaml:"periodSeconds,omitempty"`
 }
 
+type ServiceConfig struct {
+	Type         string `yaml:"type,omitempty"`
+	ExternalPort int    `yaml:"externalPort,omitempty"`
+}
+
 // LoadConfig loads and parses the paas.yaml configuration file
 func LoadConfig(filename string) (*Config, error) {
 	data, err := ioutil.ReadFile(filename)
