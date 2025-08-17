@@ -286,6 +286,6 @@ choco upgrade shipyard
 
 ## Related Commands
 
-- [`shipyard --version`](../overview.md#version) - Check current version
-- [`shipyard ssl install`](ssl.md) - Install SSL components
-- [Installation Guide](../../getting-started/quick-start.md) - Initial installation
+- [`shipyard --version`](./overview.md) - Check current version
+- [`shipyard ssl install`](./ssl.md) - Install SSL components
+- [Installation Guide](../getting-started/quick-start.md) - Initial installation
