@@ -4,9 +4,8 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"os"
-	"path/filepath"
 
+	"github.com/shipyard/cli/pkg/config"
 	_ "modernc.org/sqlite"
 )
 
@@ -21,14 +20,11 @@ type DB struct {
 
 // NewDB creates a new database connection
 func NewDB() (*DB, error) {
-	// Create manifests directory if it doesn't exist
-	manifestsDir := "manifests"
-	if err := os.MkdirAll(manifestsDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create manifests directory: %w", err)
+	// Get database path from global config
+	dbPath, err := config.GetDatabasePath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database path: %w", err)
 	}
-
-	// Database file path
-	dbPath := filepath.Join(manifestsDir, "shipyard.db")
 
 	// Open database connection
 	conn, err := sql.Open("sqlite", dbPath)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/shipyard/cli/pkg/config"
 	"github.com/shipyard/cli/pkg/k8s"
 )
 
@@ -17,20 +18,34 @@ type Generator struct {
 }
 
 // NewGenerator creates a new manifest generator
-func NewGenerator(config *Config) *Generator {
+func NewGenerator(cfg *Config) *Generator {
+	// Get manifests directory from global config
+	manifestsDir, err := config.GetManifestsDir()
+	if err != nil {
+		// Fallback to local directory on error
+		manifestsDir = "manifests"
+	}
+	
 	return &Generator{
-		config:           config,
-		outputDir:        "manifests", // Base directory for all manifests
+		config:           cfg,
+		outputDir:        manifestsDir,
 		version:          nil,
 		imagePullSecrets: []string{},
 	}
 }
 
 // NewGeneratorWithVersion creates a new manifest generator with version tracking
-func NewGeneratorWithVersion(config *Config, version *DeploymentVersion) *Generator {
+func NewGeneratorWithVersion(cfg *Config, version *DeploymentVersion) *Generator {
+	// Get manifests directory from global config
+	manifestsDir, err := config.GetManifestsDir()
+	if err != nil {
+		// Fallback to local directory on error
+		manifestsDir = "manifests"
+	}
+	
 	return &Generator{
-		config:           config,
-		outputDir:        "manifests", // Base directory for all manifests
+		config:           cfg,
+		outputDir:        manifestsDir,
 		version:          version,
 		imagePullSecrets: []string{},
 	}

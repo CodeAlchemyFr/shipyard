@@ -4,9 +4,38 @@ CLI pour déployer des applications sur Kubernetes avec simplicité.
 
 ## Installation
 
+### Installation automatique avec k3s (Recommandé)
+
+**Linux/macOS:**
+```bash
+curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh | bash
+```
+
+**Windows PowerShell:**
+```powershell
+Invoke-WebRequest -Uri "https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.ps1" -OutFile "install.ps1"; .\install.ps1
+```
+
+Cette installation inclut automatiquement :
+- ✅ **Shipyard CLI** dernière version
+- ✅ **k3s/k3d** (Kubernetes léger)
+- ✅ **cert-manager** (certificats SSL automatiques)
+- ✅ **Configuration SSL** interactive
+
+### Installation manuelle
+
+**Compilation depuis les sources:**
 ```bash
 cd cli
 go build -o shipyard main.go
+```
+
+**Téléchargement du binaire:**
+```bash
+# Remplacez PLATFORM par: linux-amd64, darwin-amd64, windows-amd64.exe, etc.
+wget https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/shipyard-PLATFORM
+chmod +x shipyard-PLATFORM
+mv shipyard-PLATFORM /usr/local/bin/shipyard
 ```
 
 ## Configuration
@@ -18,6 +47,22 @@ app:
   name: my-api
   image: ghcr.io/myuser/my-api:latest
   port: 3000
+
+service:
+  type: NodePort
+  externalPort: 30000
+
+health:
+  liveness:
+    path: /health
+    port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readiness:
+    path: /ready
+    port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
 
 resources:
   cpu: 200m
@@ -87,6 +132,35 @@ Cette commande va :
 ./shipyard db cleanup                  # Nettoyage des anciens déploiements
 ```
 
+### Supprimer une application
+
+```bash
+./shipyard delete                         # Supprimer l'app courante (paas.yaml)
+./shipyard delete my-api                  # Supprimer une app spécifique
+./shipyard delete --all                   # Supprimer toutes les applications
+./shipyard delete --force                 # Supprimer sans confirmation
+```
+
+### Mise à niveau du CLI
+
+```bash
+./shipyard upgrade                        # Mettre à jour vers la dernière version
+./shipyard upgrade --force               # Forcer la mise à jour
+./shipyard upgrade --yes                 # Sans confirmation
+```
+
+### Gestion SSL/TLS
+
+```bash
+./shipyard ssl install                   # Installer cert-manager pour SSL automatique
+```
+
+Cette commande va :
+1. Installer cert-manager sur votre cluster Kubernetes
+2. Demander votre email pour Let's Encrypt
+3. Créer un ClusterIssuer pour les certificats automatiques
+4. Configurer HTTPS automatique pour vos domaines
+
 ### Gestion des domaines
 
 ```bash
@@ -112,19 +186,46 @@ manifests/
 
 ## Fonctionnalités
 
-- ✅ Génération automatique des manifests K8s
-- ✅ Gestion des secrets (base64 encodés)
-- ✅ Ingress partagés par domaine
-- ✅ Auto-scaling HPA
-- ✅ SSL automatique avec cert-manager
-- ✅ Application directe sur le cluster
-- ✅ Logs en temps réel
-- ✅ Statut des applications
+### Core Features
+- ✅ **Génération automatique des manifests K8s**
+- ✅ **Gestion des secrets** (base64 encodés)
+- ✅ **Ingress partagés par domaine** 
+- ✅ **Auto-scaling HPA**
+- ✅ **Application directe sur le cluster**
+- ✅ **Logs en temps réel**
+- ✅ **Statut des applications**
+
+### Versioning & Déploiements
 - ✅ **Versioning des déploiements**
 - ✅ **Historique complet des images déployées**
 - ✅ **Rollback automatique vers version stable**
 - ✅ **Labels de traçabilité sur tous les manifests**
-- ✅ **Base de données SQLite (versions + domaines)**
+
+### Base de données & Domaines
+- ✅ **Base de données SQLite** (versions + domaines)
 - ✅ **Gestion centralisée des domaines**
 - ✅ **Ingress intelligents par base domain**
 - ✅ **Commandes de maintenance DB**
+
+### SSL/TLS & Sécurité
+- ✅ **SSL automatique avec cert-manager**
+- ✅ **Configuration Let's Encrypt interactive**
+- ✅ **Support Traefik (k3s) et nginx-ingress**
+- ✅ **Certificats HTTPS automatiques**
+
+### Services & Networking
+- ✅ **Configuration de services avancée** (ClusterIP, NodePort)
+- ✅ **Health checks configurables** (liveness, readiness)
+- ✅ **Support ports externes personnalisés**
+
+### Gestion du cycle de vie
+- ✅ **Suppression complète des applications** 
+- ✅ **Nettoyage automatique des dossiers vides**
+- ✅ **Mise à niveau automatique du CLI**
+- ✅ **Installation SSL en un clic**
+
+### Compatibilité
+- ✅ **k3s (Traefik) support natif**
+- ✅ **nginx-ingress support** 
+- ✅ **Multi-platform** (Linux, macOS, Windows)
+- ✅ **Installation automatique k3s + cert-manager**

@@ -91,6 +91,7 @@ The following Kubernetes resources are removed:
 
 - **Manifest directory**: `manifests/apps/[app-name]/` and all contents
 - **Generated YAML files**: deployment.yaml, service.yaml, secrets.yaml, etc.
+- **Empty directories**: Automatically removes empty parent directories after cleanup
 
 ### Database Data
 

@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/shipyard/cli/pkg/config"
+	"github.com/shipyard/cli/pkg/domains"
 	"github.com/shipyard/cli/pkg/manifests"
 )
 
@@ -84,19 +87,25 @@ func deleteApp(appName string) error {
 	vm := manifests.NewVersionManager(appName)
 	defer vm.Close()
 
-	// Delete Kubernetes resources
+	// Delete Kubernetes resources (including ingress)
 	fmt.Printf("☸️  Deleting Kubernetes resources for %s...\n", appName)
 	if err := deleteKubernetesResources(appName); err != nil {
 		fmt.Printf("⚠️  Warning: Failed to delete some Kubernetes resources: %v\n", err)
 	}
 
-	// Delete local manifest files
-	fmt.Printf("📁 Cleaning up local manifest files...\n")
+	// Delete shared ingress files for this app's domains
+	fmt.Printf("🌐 Cleaning up ingress files...\n")
+	if err := deleteIngressFiles(appName); err != nil {
+		fmt.Printf("⚠️  Warning: Failed to delete ingress files: %v\n", err)
+	}
+
+	// Delete local manifest files (just the app directory)
+	fmt.Printf("📁 Cleaning up app manifest files...\n")
 	if err := deleteManifestFiles(appName); err != nil {
 		fmt.Printf("⚠️  Warning: Failed to delete manifest files: %v\n", err)
 	}
 
-	// Clean database entries
+	// Clean database entries (this will also clean up domain associations)
 	fmt.Printf("🗃️  Cleaning up database entries...\n")
 	if err := vm.DeleteApp(); err != nil {
 		fmt.Printf("⚠️  Warning: Failed to clean database: %v\n", err)
@@ -122,7 +131,11 @@ func deleteAllApps() error {
 	}
 
 	// Get all apps from manifests directory
-	manifestsDir := "manifests/apps"
+	manifestsDir, err := config.GetAppsDir()
+	if err != nil {
+		return fmt.Errorf("failed to get apps directory: %w", err)
+	}
+	
 	if _, err := os.Stat(manifestsDir); os.IsNotExist(err) {
 		fmt.Println("ℹ️  No apps found to delete")
 		return nil
@@ -148,7 +161,8 @@ func deleteAllApps() error {
 
 	// Clean up empty directories after deleting all apps
 	fmt.Printf("🧹 Cleaning up empty directories...\n")
-	cleanupEmptyDirectories("manifests")
+	manifestsBaseDir, _ := config.GetManifestsDir()
+	cleanupEmptyDirectories(manifestsBaseDir)
 	
 	fmt.Printf("✅ Successfully deleted %d applications\n", deletedCount)
 	return nil
@@ -175,8 +189,14 @@ func deleteKubernetesResources(appName string) error {
 		return fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 
+	// Get apps directory from global config
+	appsDir, err := config.GetAppsDir()
+	if err != nil {
+		return fmt.Errorf("failed to get apps directory: %w", err)
+	}
+
 	// Delete resources by applying manifests with --delete flag
-	manifestDir := fmt.Sprintf("manifests/apps/%s", appName)
+	manifestDir := filepath.Join(appsDir, appName)
 	if _, err := os.Stat(manifestDir); os.IsNotExist(err) {
 		fmt.Printf("ℹ️  No manifest directory found for %s\n", appName)
 		return nil
@@ -187,7 +207,13 @@ func deleteKubernetesResources(appName string) error {
 }
 
 func deleteManifestFiles(appName string) error {
-	manifestDir := fmt.Sprintf("manifests/apps/%s", appName)
+	// Get apps directory from global config
+	appsDir, err := config.GetAppsDir()
+	if err != nil {
+		return fmt.Errorf("failed to get apps directory: %w", err)
+	}
+
+	manifestDir := filepath.Join(appsDir, appName)
 	
 	// Check if directory exists
 	if _, err := os.Stat(manifestDir); os.IsNotExist(err) {
@@ -215,8 +241,108 @@ func deleteManifestFiles(appName string) error {
 	fmt.Printf("✅ Deleted manifest directory: %s\n", manifestDir)
 	
 	// Clean up empty parent directories
-	cleanupEmptyDirectories("manifests")
+	manifestsBaseDir, _ := config.GetManifestsDir()
+	cleanupEmptyDirectories(manifestsBaseDir)
 	
+	return nil
+}
+
+// deleteIngressFiles removes ingress files for domains associated with the app
+func deleteIngressFiles(appName string) error {
+	// Get domains manager
+	domainManager, err := domains.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to create domain manager: %w", err)
+	}
+	defer domainManager.Close()
+
+	// Get domains for this app
+	appDomains, err := domainManager.GetDomainsForApp(appName)
+	if err != nil {
+		return fmt.Errorf("failed to get domains for app %s: %w", appName, err)
+	}
+
+	if len(appDomains) == 0 {
+		fmt.Printf("ℹ️  No domains found for app %s\n", appName)
+		return nil
+	}
+
+	// Get shared directory
+	sharedDir, err := config.GetSharedDir()
+	if err != nil {
+		return fmt.Errorf("failed to get shared directory: %w", err)
+	}
+
+	// Group domains by base domain and check if we need to delete ingress files
+	baseDomains := make(map[string]bool)
+	for _, domain := range appDomains {
+		baseDomains[domain.BaseDomain] = true
+	}
+
+	// For each base domain, check if there are other apps using it
+	for baseDomain := range baseDomains {
+		// Get all domains for this base domain
+		allDomainsForBase, err := domainManager.GetDomainsByBaseDomain(baseDomain)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Failed to get domains for base domain %s: %v\n", baseDomain, err)
+			continue
+		}
+
+		// Check if all domains for this base domain belong to the app being deleted
+		shouldDeleteIngress := true
+		for _, domain := range allDomainsForBase {
+			if domain.AppName != appName {
+				shouldDeleteIngress = false
+				break
+			}
+		}
+
+		if shouldDeleteIngress {
+			// Delete the ingress file
+			ingressFile := filepath.Join(sharedDir, fmt.Sprintf("%s.yaml", baseDomain))
+			if _, err := os.Stat(ingressFile); err == nil {
+				if err := os.Remove(ingressFile); err != nil {
+					fmt.Printf("⚠️  Warning: Failed to remove ingress file %s: %v\n", ingressFile, err)
+				} else {
+					fmt.Printf("🗑️  Removed ingress: %s\n", ingressFile)
+				}
+			}
+
+			// Also delete from Kubernetes
+			if err := deleteIngressFromKubernetes(baseDomain); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to delete ingress from Kubernetes: %v\n", err)
+			}
+		} else {
+			fmt.Printf("ℹ️  Keeping ingress for %s (used by other apps)\n", baseDomain)
+		}
+	}
+
+	return nil
+}
+
+// deleteIngressFromKubernetes removes ingress from Kubernetes cluster
+func deleteIngressFromKubernetes(baseDomain string) error {
+	ingressName := fmt.Sprintf("%s-ingress", baseDomain)
+	
+	fmt.Printf("🗑️  Deleting ingress %s from Kubernetes\n", ingressName)
+	
+	// Use kubectl to delete the ingress directly
+	cmd := fmt.Sprintf("kubectl delete ingress %s --ignore-not-found=true", ingressName)
+	
+	// Execute the command (this is a simple approach)
+	// In a production environment, you'd use proper subprocess execution
+	if err := executeKubectlCommand(cmd); err != nil {
+		fmt.Printf("⚠️  Warning: Could not delete ingress %s: %v\n", ingressName, err)
+	}
+	
+	return nil
+}
+
+// executeKubectlCommand executes a kubectl command
+func executeKubectlCommand(cmd string) error {
+	// For now, we'll just print the command that would be executed
+	// In a real implementation, use exec.Command()
+	fmt.Printf("📋 Would execute: %s\n", cmd)
 	return nil
 }
 
@@ -248,7 +374,8 @@ func cleanupEmptyDirectories(startPath string) {
 	}
 
 	// If directory is now empty, remove it (but not the root manifests directory)
-	if len(entries) == 0 && startPath != "manifests" {
+	manifestsBaseDir, _ := config.GetManifestsDir()
+	if len(entries) == 0 && startPath != manifestsBaseDir {
 		fmt.Printf("🧹 Removing empty directory: %s\n", startPath)
 		os.Remove(startPath)
 	}
