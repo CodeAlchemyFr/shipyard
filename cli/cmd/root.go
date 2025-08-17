@@ -4,19 +4,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "dev"
+var cliVersion = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:   "shipyard",
 	Short: "Shipyard CLI - Deploy applications to Kubernetes with ease",
 	Long: `Shipyard is a PaaS CLI tool that simplifies Kubernetes deployments.
 It generates Kubernetes manifests and manages deployments for your applications.`,
-	Version: version,
+	Version: cliVersion,
 }
 
 // SetVersion sets the version for the CLI
 func SetVersion(v string) {
-	version = v
+	cliVersion = v
 	rootCmd.Version = v
 }
 

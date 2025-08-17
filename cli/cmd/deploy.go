@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/shipyard/cli/pkg/manifests"
 	"github.com/shipyard/cli/pkg/k8s"
+	versionpkg "github.com/shipyard/cli/pkg/version"
 )
 
 var deployCmd = &cobra.Command{
@@ -26,6 +27,9 @@ This will create:
 }
 
 func runDeploy() error {
+	// Check for updates (non-blocking)
+	go versionpkg.NotifyIfUpdateAvailable(versionpkg.Current)
+	
 	fmt.Println("🚀 Starting deployment...")
 
 	// 1. Parse paas.yaml configuration

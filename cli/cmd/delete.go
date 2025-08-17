@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -339,10 +340,27 @@ func deleteIngressFromKubernetes(baseDomain string) error {
 }
 
 // executeKubectlCommand executes a kubectl command
-func executeKubectlCommand(cmd string) error {
-	// For now, we'll just print the command that would be executed
-	// In a real implementation, use exec.Command()
-	fmt.Printf("📋 Would execute: %s\n", cmd)
+func executeKubectlCommand(cmdStr string) error {
+	fmt.Printf("📋 Executing: %s\n", cmdStr)
+	
+	// Split the command string into parts
+	parts := strings.Fields(cmdStr)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty command")
+	}
+	
+	// Execute the command
+	cmd := exec.Command(parts[0], parts[1:]...)
+	output, err := cmd.CombinedOutput()
+	
+	if err != nil {
+		return fmt.Errorf("command failed: %s, output: %s", err, string(output))
+	}
+	
+	if len(output) > 0 {
+		fmt.Printf("✅ %s\n", strings.TrimSpace(string(output)))
+	}
+	
 	return nil
 }
 

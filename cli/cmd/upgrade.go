@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -13,8 +15,9 @@ import (
 )
 
 var (
-	forceUpgrade bool
-	skipConfirm  bool
+	forceUpgrade  bool
+	skipConfirm   bool
+	internalMode  bool
 )
 
 var upgradeCmd = &cobra.Command{
@@ -40,9 +43,17 @@ func init() {
 	rootCmd.AddCommand(upgradeCmd)
 	upgradeCmd.Flags().BoolVar(&forceUpgrade, "force", false, "Force upgrade without version check")
 	upgradeCmd.Flags().BoolVar(&skipConfirm, "yes", false, "Skip confirmation prompt")
+	upgradeCmd.Flags().BoolVar(&internalMode, "internal", false, "Internal upgrade mode (used by wrapper script)")
+	upgradeCmd.Flags().MarkHidden("internal")
 }
 
 func runUpgrade() {
+	if internalMode {
+		// Internal mode: actually perform the replacement
+		runInternalUpgrade()
+		return
+	}
+
 	fmt.Println("🚀 Upgrading Shipyard CLI...")
 
 	// Get current version
@@ -95,37 +106,16 @@ func runUpgrade() {
 		os.Exit(1)
 	}
 
-	// Backup current version
-	backupPath := execPath + ".backup"
-	fmt.Printf("💾 Creating backup: %s\n", backupPath)
-	if err := copyFile(execPath, backupPath); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to create backup: %v\n", err)
-	}
-
-	// Replace binary
+	// Create and execute wrapper script
 	fmt.Printf("🔄 Installing new version...\n")
-	if err := replaceExecutable(tempFile, execPath); err != nil {
-		fmt.Printf("❌ Failed to replace executable: %v\n", err)
-		// Try to restore backup
-		if _, err := os.Stat(backupPath); err == nil {
-			fmt.Println("🔄 Restoring backup...")
-			copyFile(backupPath, execPath)
-		}
+	if err := createAndRunWrapperScript(tempFile, execPath, latestVersion); err != nil {
+		fmt.Printf("❌ Failed to create upgrade script: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Verify installation
-	fmt.Println("✅ Upgrade completed successfully!")
-	fmt.Printf("🎉 Shipyard CLI updated to %s\n", latestVersion)
-	
-	// Clean up backup
-	os.Remove(backupPath)
-	
-	fmt.Println("📚 Run 'shipyard --version' to verify the new version")
 }
 
 func getCurrentVersion() string {
-	return version
+	return cliVersion
 }
 
 func getLatestVersion() (string, error) {
@@ -256,6 +246,76 @@ func replaceExecutable(newFile, targetPath string) error {
 
 	// Unix-like systems
 	return copyFile(newFile, targetPath)
+}
+
+// createAndRunWrapperScript creates a script to replace the binary and executes it
+func createAndRunWrapperScript(newBinary, targetPath, version string) error {
+	// Create temporary script
+	scriptContent := createUpgradeScript(newBinary, targetPath, version)
+	
+	scriptPath := filepath.Join(os.TempDir(), "shipyard-upgrade.sh")
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		return fmt.Errorf("failed to create upgrade script: %w", err)
+	}
+	defer os.Remove(scriptPath)
+
+	// Execute the script
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	return cmd.Run()
+}
+
+// createUpgradeScript generates the upgrade script content
+func createUpgradeScript(newBinary, targetPath, version string) string {
+	return fmt.Sprintf(`#!/bin/bash
+set -e
+
+echo "🔄 Executing upgrade script..."
+
+# Check if we need sudo
+NEED_SUDO=false
+if [ ! -w "$(dirname "%s")" ]; then
+    NEED_SUDO=true
+    echo "🔑 Root permissions required for installation directory"
+fi
+
+# Create backup
+BACKUP_PATH="%s.backup"
+echo "💾 Creating backup: $BACKUP_PATH"
+
+if [ "$NEED_SUDO" = true ]; then
+    sudo cp "%s" "$BACKUP_PATH" 2>/dev/null || echo "⚠️  Warning: Could not create backup"
+else
+    cp "%s" "$BACKUP_PATH" 2>/dev/null || echo "⚠️  Warning: Could not create backup"
+fi
+
+# Replace binary
+echo "📦 Installing new version..."
+if [ "$NEED_SUDO" = true ]; then
+    sudo cp "%s" "%s"
+    sudo chmod +x "%s"
+else
+    cp "%s" "%s"
+    chmod +x "%s"
+fi
+
+# Verify installation
+echo "✅ Upgrade completed successfully!"
+echo "🎉 Shipyard CLI updated to %s"
+echo "📚 Run 'shipyard --version' to verify the new version"
+
+# Clean up backup after successful install
+rm -f "$BACKUP_PATH" 2>/dev/null || true
+
+echo "🧹 Cleanup completed"
+`, targetPath, targetPath, targetPath, targetPath, newBinary, targetPath, targetPath, newBinary, targetPath, targetPath, version)
+}
+
+// runInternalUpgrade performs the actual binary replacement (unused in wrapper approach)
+func runInternalUpgrade() {
+	fmt.Println("🔄 Internal upgrade mode - this should not be called with wrapper script approach")
 }
 
 func confirmUpgrade(current, latest string) bool {
