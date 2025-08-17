@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shipyard/cli/pkg/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -84,7 +85,12 @@ func NewClient() (*Client, error) {
 
 // ApplyManifests applies all manifests for an application
 func (c *Client) ApplyManifests(appName string) error {
-	appDir := filepath.Join("manifests", "apps", appName)
+	// Get app directory from global config
+	appsDir, err := config.GetAppsDir()
+	if err != nil {
+		return fmt.Errorf("failed to get apps directory: %w", err)
+	}
+	appDir := filepath.Join(appsDir, appName)
 	
 	// Apply app manifests
 	if err := c.applyManifestsFromDir(appDir); err != nil {
@@ -92,7 +98,11 @@ func (c *Client) ApplyManifests(appName string) error {
 	}
 
 	// Apply shared ingress manifests
-	sharedDir := filepath.Join("manifests", "shared")
+	sharedDir, err := config.GetSharedDir()
+	if err != nil {
+		return fmt.Errorf("failed to get shared directory: %w", err)
+	}
+	
 	if _, err := os.Stat(sharedDir); err == nil {
 		if err := c.applyManifestsFromDir(sharedDir); err != nil {
 			return fmt.Errorf("failed to apply shared manifests: %w", err)
