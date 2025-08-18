@@ -324,17 +324,78 @@ func loadKubeConfig() (*rest.Config, error) {
 	return clientcmd.BuildConfigFromFlags("", kubeconfig)
 }
 
-// waitForDeployment waits for a deployment to be ready
+// waitForDeployment waits for a deployment to be ready with detailed status
 func (c *Client) waitForDeployment(name string, timeout time.Duration) error {
-	return wait.PollImmediate(5*time.Second, timeout, func() (bool, error) {
+	lastReplicasReady := int32(-1)
+	lastEventsCount := 0
+	
+	return wait.PollImmediate(2*time.Second, timeout, func() (bool, error) {
+		// Get deployment status
 		deployment, err := c.clientset.AppsV1().Deployments(c.namespace).Get(
 			context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
+			fmt.Printf("❌ Error getting deployment: %v\n", err)
 			return false, err
 		}
 
-		return deployment.Status.ReadyReplicas == deployment.Status.Replicas && 
-			   deployment.Status.Replicas > 0, nil
+		// Show replica status if changed
+		if deployment.Status.ReadyReplicas != lastReplicasReady {
+			fmt.Printf("🔄 Replicas: %d/%d ready\n", deployment.Status.ReadyReplicas, deployment.Status.Replicas)
+			lastReplicasReady = deployment.Status.ReadyReplicas
+		}
+
+		// Check for any conditions
+		for _, condition := range deployment.Status.Conditions {
+			if condition.Type == "Progressing" && condition.Status == "False" {
+				fmt.Printf("⚠️  Deployment condition: %s - %s\n", condition.Reason, condition.Message)
+			}
+		}
+
+		// Show recent events related to this deployment
+		events, err := c.clientset.CoreV1().Events(c.namespace).List(
+			context.TODO(), metav1.ListOptions{
+				FieldSelector: fmt.Sprintf("involvedObject.name=%s", name),
+			})
+		if err == nil && len(events.Items) > lastEventsCount {
+			// Show new events
+			for i := lastEventsCount; i < len(events.Items); i++ {
+				event := events.Items[i]
+				if time.Since(event.CreationTimestamp.Time) < 30*time.Second {
+					fmt.Printf("📋 Event: %s - %s\n", event.Reason, event.Message)
+				}
+			}
+			lastEventsCount = len(events.Items)
+		}
+
+		// Also check pod status for more detailed info
+		pods, err := c.clientset.CoreV1().Pods(c.namespace).List(
+			context.TODO(), metav1.ListOptions{
+				LabelSelector: fmt.Sprintf("app=%s", name),
+			})
+		if err == nil {
+			for _, pod := range pods.Items {
+				if pod.Status.Phase == "Pending" {
+					for _, condition := range pod.Status.Conditions {
+						if condition.Type == "PodScheduled" && condition.Status == "False" {
+							fmt.Printf("⏳ Pod %s: %s - %s\n", pod.Name, condition.Reason, condition.Message)
+						}
+					}
+				}
+				if pod.Status.Phase == "Failed" {
+					fmt.Printf("❌ Pod %s failed: %s\n", pod.Name, pod.Status.Message)
+				}
+			}
+		}
+
+		// Check if deployment is ready
+		isReady := deployment.Status.ReadyReplicas == deployment.Status.Replicas && 
+				   deployment.Status.Replicas > 0
+		
+		if isReady {
+			fmt.Printf("✅ Deployment %s is ready!\n", name)
+		}
+		
+		return isReady, nil
 	})
 }
 

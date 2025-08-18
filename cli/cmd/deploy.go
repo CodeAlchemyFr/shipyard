@@ -78,9 +78,26 @@ func runDeploy() error {
 		return fmt.Errorf("failed to create k8s client: %w", err)
 	}
 
+	fmt.Printf("🔧 Applying manifests for %s...\n", config.App.Name)
 	if err := client.ApplyManifests(config.App.Name); err != nil {
 		// Mark deployment as failed
 		versionManager.UpdateVersionStatus(deployVersion.Version, "failed")
+		
+		// Try to get some diagnostic information
+		fmt.Println("\n🔍 Diagnostic information:")
+		if pods, podErr := client.GetPods(config.App.Name); podErr == nil {
+			for _, pod := range pods {
+				fmt.Printf("   Pod %s: %s\n", pod.Name, pod.Status.Phase)
+				if pod.Status.Phase == "Failed" || pod.Status.Phase == "Pending" {
+					for _, condition := range pod.Status.Conditions {
+						if condition.Status == "False" {
+							fmt.Printf("     - %s: %s\n", condition.Type, condition.Message)
+						}
+					}
+				}
+			}
+		}
+		
 		return fmt.Errorf("failed to apply manifests: %w", err)
 	}
 
@@ -93,5 +110,10 @@ func runDeploy() error {
 	fmt.Printf("   App: %s\n", config.App.Name)
 	fmt.Printf("   Version: %s\n", deployVersion.Version)
 	fmt.Printf("   Image: %s\n", config.App.Image)
+	
+	// Offer to show logs
+	fmt.Printf("\n💡 To follow logs, run: shipyard logs %s -f\n", config.App.Name)
+	fmt.Printf("💡 To check status, run: shipyard status\n")
+	
 	return nil
 }
