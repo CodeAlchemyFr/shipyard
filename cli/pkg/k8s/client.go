@@ -380,9 +380,32 @@ func (c *Client) waitForDeployment(name string, timeout time.Duration) error {
 							fmt.Printf("⏳ Pod %s: %s - %s\n", pod.Name, condition.Reason, condition.Message)
 						}
 					}
+					// Show container statuses for pending pods
+					for _, containerStatus := range pod.Status.ContainerStatuses {
+						if containerStatus.State.Waiting != nil {
+							fmt.Printf("📦 Container %s: %s - %s\n", 
+								containerStatus.Name, 
+								containerStatus.State.Waiting.Reason, 
+								containerStatus.State.Waiting.Message)
+						}
+					}
+				}
+				if pod.Status.Phase == "Running" {
+					// Show if containers are still starting
+					for _, containerStatus := range pod.Status.ContainerStatuses {
+						if !containerStatus.Ready {
+							if containerStatus.State.Running != nil {
+								fmt.Printf("🚀 Container %s starting...\n", containerStatus.Name)
+								// Show recent logs for starting containers
+								c.showRecentLogs(pod.Name, containerStatus.Name, 5)
+							}
+						}
+					}
 				}
 				if pod.Status.Phase == "Failed" {
 					fmt.Printf("❌ Pod %s failed: %s\n", pod.Name, pod.Status.Message)
+					// Show logs for failed pods
+					c.showRecentLogs(pod.Name, "", 10)
 				}
 			}
 		}
@@ -549,6 +572,48 @@ func (c *Client) IsMetricsServerAvailable() bool {
 	_, err := c.metricsClient.MetricsV1beta1().NodeMetricses().List(
 		context.TODO(), metav1.ListOptions{Limit: 1})
 	return err == nil
+}
+
+// showRecentLogs displays recent logs from a pod/container
+func (c *Client) showRecentLogs(podName, containerName string, lines int) {
+	logOptions := &corev1.PodLogOptions{
+		TailLines: int64Ptr(int64(lines)),
+	}
+	
+	if containerName != "" {
+		logOptions.Container = containerName
+	}
+
+	req := c.clientset.CoreV1().Pods(c.namespace).GetLogs(podName, logOptions)
+	
+	logs, err := req.Stream(context.TODO())
+	if err != nil {
+		fmt.Printf("   (could not get logs: %v)\n", err)
+		return
+	}
+	defer logs.Close()
+
+	// Read logs with a small timeout
+	logData := make([]byte, 1024)
+	n, err := logs.Read(logData)
+	if err != nil && err != io.EOF {
+		return
+	}
+	
+	if n > 0 {
+		logStr := string(logData[:n])
+		fmt.Printf("   📝 Last logs:\n")
+		for _, line := range strings.Split(strings.TrimSpace(logStr), "\n") {
+			if line != "" {
+				fmt.Printf("      %s\n", line)
+			}
+		}
+	}
+}
+
+// int64Ptr returns a pointer to an int64 value
+func int64Ptr(i int64) *int64 {
+	return &i
 }
 
 // DeleteManifests deletes all manifests for an application
