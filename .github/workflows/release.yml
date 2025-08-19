@@ -234,7 +234,7 @@ jobs:
           spec:
             acme:
               server: https://acme-v02.api.letsencrypt.org/directory
-              email: \${SSL_EMAIL}
+              email: ${SSL_EMAIL}
               privateKeySecretRef:
                 name: letsencrypt-prod
               solvers:
