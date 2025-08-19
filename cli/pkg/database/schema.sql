@@ -102,14 +102,12 @@ BEGIN
     UPDATE domains SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
--- Table for container registry credentials
+-- Table for container registry credentials (simplified)
 CREATE TABLE IF NOT EXISTS registry_credentials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     registry_url TEXT NOT NULL UNIQUE, -- e.g., ghcr.io, docker.io, my-registry.com
     username TEXT NOT NULL,
     password TEXT NOT NULL, -- Encrypted token/password
-    email TEXT, -- Optional email for Docker registry
-    registry_type TEXT DEFAULT 'docker', -- docker, github, gitlab, aws, etc.
     is_default BOOLEAN DEFAULT FALSE, -- Default registry for pulling
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

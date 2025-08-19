@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: escape-nation
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: api
+        image: ${IMAGE_TAG}
+        ports:
+        - containerPort: 4000
+        env:
+        # Variables depuis le secret
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: JWT_SECRET
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: DB_PASSWORD
+        - name: SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: SMTP_PASS
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: REDIS_PASSWORD
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: GOOGLE_APPLICATION_CREDENTIALS
+        # Variables normales
+        - name: JWT_EXPIRES_IN
+          value: "24h"
+        - name: BCRYPT_SALT_OR_ROUNDS
+          value: "12"
+        - name: DB_HOST
+          value: "postgres-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USERNAME
+          value: "postgres"
+        - name: DB_NAME
+          value: "escape_nation"
+        - name: PORT
+          value: "4000"
+        - name: NODE_ENV
+          value: "prod"
+        - name: FRONTEND_URL
+          value: "https://game.shunt-app.com"
+        - name: COMPANY_NAME
+          value: "EscapeNation"
+        - name: SMTP_HOST
+          value: "ssl0.ovh.net"
+        - name: SMTP_PORT
+          value: "465"
+        - name: SMTP_SECURE
+          value: "true"
+        - name: SMTP_USER
+          value: "hello@escape-nation.com"
+        - name: SMTP_IGNORE_TLS
+          value: "false"
+        - name: EMAIL_FROM
+          value: "hello@escape-nation.com"
+        - name: GCP_PROJECT_ID
+          value: "escape-nation"
+        - name: GCP_STORAGE_BUCKET
+          value: "bucket-escape-nation"
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_TTL
+          value: "3600"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

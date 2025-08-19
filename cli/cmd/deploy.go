@@ -10,6 +10,10 @@ import (
 	versionpkg "github.com/shipyard/cli/pkg/version"
 )
 
+var (
+	autoRegistry bool // Flag for auto-selecting registry secrets
+)
+
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploy an application to Kubernetes",
@@ -18,7 +22,10 @@ This will create:
 - A deployment.yaml for your application
 - A secrets.yaml for environment variables (base64 encoded)  
 - A service.yaml for internal load balancing
-- Update shared ingress files for domains`,
+- Update shared ingress files for domains
+
+By default, you'll be prompted to select which registry secrets to use.
+Use --auto-registry to automatically select the best matching registry.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDeploy(); err != nil {
 			log.Fatalf("Deploy failed: %v", err)
@@ -51,7 +58,7 @@ func runDeploy() error {
 	}
 
 	// 3. Generate manifests for the application with version tracking
-	generator := manifests.NewGeneratorWithVersion(config, deployVersion)
+	generator := manifests.NewGeneratorWithVersionAndMode(config, deployVersion, !autoRegistry)
 	
 	fmt.Printf("📦 Generating manifests for app: %s (version: %s)\n", config.App.Name, deployVersion.Version)
 	
@@ -116,4 +123,8 @@ func runDeploy() error {
 	fmt.Printf("💡 To check status, run: shipyard status\n")
 	
 	return nil
+}
+
+func init() {
+	deployCmd.Flags().BoolVar(&autoRegistry, "auto-registry", false, "Automatically select the best matching registry instead of prompting")
 }

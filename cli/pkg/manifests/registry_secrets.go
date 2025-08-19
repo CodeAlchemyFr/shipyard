@@ -30,7 +30,7 @@ type RegistrySecretData struct {
 	DockerConfigJSON  string
 }
 
-// GenerateRegistrySecrets generates Kubernetes secrets for container registries
+// GenerateRegistrySecrets generates Kubernetes secrets for container registries with interactive or auto selection
 func (g *Generator) GenerateRegistrySecrets(appDir string) ([]string, error) {
 	// Get registry manager
 	manager, err := registry.NewManager()
@@ -39,30 +39,72 @@ func (g *Generator) GenerateRegistrySecrets(appDir string) ([]string, error) {
 	}
 	defer manager.Close()
 
-	// Get registry for the app image
-	imageRegistry, err := manager.GetRegistryForImage(g.config.App.Image)
-	if err != nil {
-		// No registry needed, return empty list
+	var selectedRegistries []*registry.Registry
+	
+	if g.interactiveMode {
+		// Interactive selection of registries
+		selectedRegistries, err = manager.SelectRegistriesInteractive(g.config.App.Image)
+		if err != nil {
+			return nil, fmt.Errorf("failed to select registries interactively: %w", err)
+		}
+	} else {
+		// Automatic selection of registries
+		selectedRegistries, err = manager.SelectRegistriesAuto(g.config.App.Image)
+		if err != nil {
+			return nil, fmt.Errorf("failed to select registries automatically: %w", err)
+		}
+	}
+
+	if len(selectedRegistries) == 0 {
+		// No registries selected, return empty list
 		return []string{}, nil
 	}
 
-	// Create Docker config secret
-	dockerConfig, err := manager.CreateDockerConfigSecret(imageRegistry)
+	var secretNames []string
+
+	// Generate secrets for each selected registry
+	for i, selectedRegistry := range selectedRegistries {
+		secretName, err := g.generateSingleRegistrySecret(appDir, selectedRegistry, i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate secret for registry %s: %w", selectedRegistry.RegistryURL, err)
+		}
+		secretNames = append(secretNames, secretName)
+	}
+
+	return secretNames, nil
+}
+
+// generateSingleRegistrySecret generates a secret for a single registry
+func (g *Generator) generateSingleRegistrySecret(appDir string, selectedRegistry *registry.Registry, index int) (string, error) {
+	// Get registry manager
+	manager, err := registry.NewManager()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create docker config: %w", err)
+		return "", fmt.Errorf("failed to initialize registry manager: %w", err)
+	}
+	defer manager.Close()
+
+	// Create Docker config secret
+	dockerConfig, err := manager.CreateDockerConfigSecret(selectedRegistry)
+	if err != nil {
+		return "", fmt.Errorf("failed to create docker config: %w", err)
 	}
 
 	// Convert to JSON
 	dockerConfigBytes, err := json.Marshal(dockerConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal docker config: %w", err)
+		return "", fmt.Errorf("failed to marshal docker config: %w", err)
 	}
 
 	// Base64 encode for Kubernetes secret
 	dockerConfigB64 := base64.StdEncoding.EncodeToString(dockerConfigBytes)
 
-	// Generate secret name
-	secretName := fmt.Sprintf("%s-registry-secret", g.config.App.Name)
+	// Generate unique secret name
+	var secretName string
+	if index == 0 {
+		secretName = fmt.Sprintf("%s-registry-secret", g.config.App.Name)
+	} else {
+		secretName = fmt.Sprintf("%s-registry-secret-%d", g.config.App.Name, index+1)
+	}
 
 	// Create secret data
 	secretData := RegistrySecretData{
@@ -74,23 +116,30 @@ func (g *Generator) GenerateRegistrySecrets(appDir string) ([]string, error) {
 	// Parse template
 	tmpl, err := template.New("registry-secret").Parse(registrySecretTemplate)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse registry secret template: %w", err)
+		return "", fmt.Errorf("failed to parse registry secret template: %w", err)
 	}
 
-	// Create secret file
-	filePath := filepath.Join(appDir, "registry-secret.yaml")
+	// Create secret file with unique name
+	var fileName string
+	if index == 0 {
+		fileName = "registry-secret.yaml"
+	} else {
+		fileName = fmt.Sprintf("registry-secret-%d.yaml", index+1)
+	}
+	
+	filePath := filepath.Join(appDir, fileName)
 	file, err := os.Create(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create registry secret file %s: %w", filePath, err)
+		return "", fmt.Errorf("failed to create registry secret file %s: %w", filePath, err)
 	}
 	defer file.Close()
 
 	// Execute template
 	if err := tmpl.Execute(file, secretData); err != nil {
-		return nil, fmt.Errorf("failed to execute registry secret template: %w", err)
+		return "", fmt.Errorf("failed to execute registry secret template: %w", err)
 	}
 
-	fmt.Printf("🔐 Generated: %s (registry: %s)\n", filePath, imageRegistry.RegistryURL)
+	fmt.Printf("🔐 Generated: %s (registry: %s)\n", filePath, selectedRegistry.RegistryURL)
 	
-	return []string{secretName}, nil
+	return secretName, nil
 }

@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/shipyard/cli/pkg/domains"
@@ -13,6 +15,12 @@ var domainCmd = &cobra.Command{
 	Use:   "domain",
 	Short: "Manage domains for applications",
 	Long:  `Add, remove, and list domains for your applications.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Interactive mode when no subcommand is provided
+		if err := runDomainInteractive(); err != nil {
+			log.Fatalf("Domain operation failed: %v", err)
+		}
+	},
 }
 
 var domainAddCmd = &cobra.Command{
@@ -178,5 +186,165 @@ func runDomainRemove(hostname string) error {
 
 	fmt.Printf("🚀 To apply changes to cluster, run: shipyard deploy\n")
 	return nil
+}
+
+// runDomainInteractive provides an interactive menu for domain management
+func runDomainInteractive() error {
+	// Load current config to get app name
+	config, err := manifests.LoadConfig("paas.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to load paas.yaml: %w", err)
+	}
+
+	for {
+		fmt.Printf("\n🌐 Domain Management - %s\n", config.App.Name)
+		fmt.Println("=============================")
+		
+		// Show current domains first
+		domainManager, err := domains.NewManager()
+		if err != nil {
+			return fmt.Errorf("failed to create domain manager: %w", err)
+		}
+		
+		appDomains, err := domainManager.GetDomainsForApp(config.App.Name)
+		if err != nil {
+			domainManager.Close()
+			return fmt.Errorf("failed to get domains: %w", err)
+		}
+		
+		if len(appDomains) > 0 {
+			fmt.Println("\nCurrent domains:")
+			for i, domain := range appDomains {
+				sslStatus := "✅"
+				if !domain.SSLEnabled {
+					sslStatus = "❌"
+				}
+				fmt.Printf("  %d. https://%s %s\n", i+1, domain.Hostname, sslStatus)
+			}
+		} else {
+			fmt.Println("\n📋 No domains configured")
+		}
+		
+		domainManager.Close()
+		
+		fmt.Println("\nActions:")
+		fmt.Println("  1. Add domain")
+		fmt.Println("  2. Remove domain")
+		fmt.Println("  3. List domains (detailed)")
+		fmt.Println("  0. Exit")
+		
+		fmt.Print("\nSelect action: ")
+		var choice string
+		fmt.Scanln(&choice)
+		
+		switch strings.TrimSpace(choice) {
+		case "1":
+			if err := interactiveAddDomain(); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+			}
+		case "2":
+			if err := interactiveRemoveDomain(); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+			}
+		case "3":
+			if err := runDomainList(); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+			}
+		case "0", "":
+			fmt.Println("👋 Goodbye!")
+			return nil
+		default:
+			fmt.Println("❌ Invalid choice. Please select 0-3.")
+		}
+	}
+}
+
+// interactiveAddDomain prompts user to add a domain interactively
+func interactiveAddDomain() error {
+	fmt.Println("\n📝 Add Domain")
+	fmt.Println("=============")
+	
+	var hostname string
+	
+	fmt.Print("Domain/Hostname (e.g., api.myapp.com): ")
+	fmt.Scanln(&hostname)
+	
+	if strings.TrimSpace(hostname) == "" {
+		return fmt.Errorf("hostname cannot be empty")
+	}
+	
+	// Validate hostname format
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+	if !strings.Contains(hostname, ".") {
+		return fmt.Errorf("hostname must include a domain (e.g., api.myapp.com)")
+	}
+	
+	return runDomainAdd(hostname)
+}
+
+// interactiveRemoveDomain prompts user to remove a domain
+func interactiveRemoveDomain() error {
+	// Load current config to get app name
+	config, err := manifests.LoadConfig("paas.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to load paas.yaml: %w", err)
+	}
+
+	domainManager, err := domains.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to create domain manager: %w", err)
+	}
+	defer domainManager.Close()
+	
+	appDomains, err := domainManager.GetDomainsForApp(config.App.Name)
+	if err != nil {
+		return fmt.Errorf("failed to get domains: %w", err)
+	}
+	
+	if len(appDomains) == 0 {
+		fmt.Println("📋 No domains to remove")
+		return nil
+	}
+	
+	fmt.Println("\n🗑️  Remove Domain")
+	fmt.Println("=================")
+	
+	fmt.Println("Select domain to remove:")
+	for i, domain := range appDomains {
+		sslStatus := "✅"
+		if !domain.SSLEnabled {
+			sslStatus = "❌"
+		}
+		fmt.Printf("  %d. https://%s %s\n", i+1, domain.Hostname, sslStatus)
+	}
+	fmt.Println("  0. Cancel")
+	
+	fmt.Print("\nSelect: ")
+	var choice string
+	fmt.Scanln(&choice)
+	
+	if choice == "0" || strings.TrimSpace(choice) == "" {
+		fmt.Println("❌ Cancelled")
+		return nil
+	}
+	
+	index, err := strconv.Atoi(strings.TrimSpace(choice))
+	if err != nil || index < 1 || index > len(appDomains) {
+		return fmt.Errorf("invalid selection")
+	}
+	
+	selectedDomain := appDomains[index-1]
+	
+	// Confirm removal
+	fmt.Printf("⚠️  Are you sure you want to remove %s? (y/N): ", selectedDomain.Hostname)
+	var confirm string
+	fmt.Scanln(&confirm)
+	
+	if strings.ToLower(strings.TrimSpace(confirm)) != "y" {
+		fmt.Println("❌ Cancelled")
+		return nil
+	}
+	
+	return runDomainRemove(selectedDomain.Hostname)
 }
 

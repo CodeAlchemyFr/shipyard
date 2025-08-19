@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/shipyard/cli/pkg/manifests"
@@ -14,15 +16,19 @@ var rollbackCmd = &cobra.Command{
 	Short: "Rollback to a previous deployment version",
 	Long: `Rollback your application to a previous deployment version.
 You can specify either a version (e.g., v1634567890) or an image tag (e.g., v1.2.3).
-If no version is specified, it will rollback to the latest successful deployment.`,
+If no version is specified, it will show an interactive list of deployments.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var targetVersion string
 		if len(args) > 0 {
 			targetVersion = args[0]
-		}
-		
-		if err := runRollback(targetVersion); err != nil {
-			log.Fatalf("Rollback failed: %v", err)
+			if err := runRollback(targetVersion); err != nil {
+				log.Fatalf("Rollback failed: %v", err)
+			}
+		} else {
+			// Interactive mode when no version specified
+			if err := runRollbackInteractive(); err != nil {
+				log.Fatalf("Rollback failed: %v", err)
+			}
 		}
 	},
 }
@@ -125,4 +131,102 @@ func runRollback(targetIdentifier string) error {
 	fmt.Printf("   New deployment version: %s\n", rollbackVersion.Version)
 
 	return nil
+}
+
+// runRollbackInteractive provides an interactive rollback menu
+func runRollbackInteractive() error {
+	fmt.Println("🔄 Interactive Rollback")
+	fmt.Println("======================")
+
+	// Parse current config to get app name
+	config, err := manifests.LoadConfig("paas.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to load paas.yaml: %w", err)
+	}
+
+	fmt.Printf("App: %s\n", config.App.Name)
+
+	// Load version manager
+	versionManager := manifests.NewVersionManager(config.App.Name)
+
+	// Get deployment history
+	versions, err := versionManager.GetVersionHistory(10) // Get last 10 versions
+	if err != nil {
+		return fmt.Errorf("failed to get deployment history: %w", err)
+	}
+
+	if len(versions) == 0 {
+		fmt.Println("📋 No deployment history found")
+		return nil
+	}
+
+	// Display deployment options
+	fmt.Println("\nAvailable deployments:")
+	fmt.Printf("%-5s %-15s %-25s %-10s %-20s\n", "No.", "Version", "Image Tag", "Status", "Deployed")
+	fmt.Println("─────────────────────────────────────────────────────────────────────────")
+
+	successfulVersions := []manifests.DeploymentVersion{}
+	for i, version := range versions {
+		// Only show successful deployments for rollback
+		if version.Status == "success" {
+			successfulVersions = append(successfulVersions, version)
+			
+			statusIcon := "✅"
+			if version.Status == "failed" {
+				statusIcon = "❌"
+			} else if version.Status == "pending" {
+				statusIcon = "⏳"
+			}
+
+			fmt.Printf("%-5d %-15s %-25s %-10s %-20s\n", 
+				len(successfulVersions), 
+				version.Version, 
+				version.ImageTag,
+				statusIcon,
+				version.Timestamp.Format("2006-01-02 15:04"),
+			)
+		}
+	}
+
+	if len(successfulVersions) == 0 {
+		fmt.Println("📋 No successful deployments found for rollback")
+		return nil
+	}
+
+	fmt.Println("  0. Cancel")
+
+	fmt.Print("\nSelect deployment to rollback to: ")
+	var choice string
+	fmt.Scanln(&choice)
+
+	if choice == "0" || strings.TrimSpace(choice) == "" {
+		fmt.Println("❌ Rollback cancelled")
+		return nil
+	}
+
+	index, err := strconv.Atoi(strings.TrimSpace(choice))
+	if err != nil || index < 1 || index > len(successfulVersions) {
+		return fmt.Errorf("invalid selection: must be between 1-%d", len(successfulVersions))
+	}
+
+	selectedVersion := successfulVersions[index-1]
+
+	// Show rollback confirmation
+	fmt.Printf("\n🎯 Rollback Details:\n")
+	fmt.Printf("   From: %s (%s)\n", config.App.Image, "current")
+	fmt.Printf("   To: %s (%s)\n", selectedVersion.Image, selectedVersion.Version)
+	fmt.Printf("   Deployed: %s\n", selectedVersion.Timestamp.Format("2006-01-02 15:04:05"))
+	
+	// Confirm rollback
+	fmt.Print("\n⚠️  Are you sure you want to rollback? (y/N): ")
+	var confirm string
+	fmt.Scanln(&confirm)
+
+	if strings.ToLower(strings.TrimSpace(confirm)) != "y" {
+		fmt.Println("❌ Rollback cancelled")
+		return nil
+	}
+
+	// Perform rollback
+	return runRollback(selectedVersion.Version)
 }

@@ -15,6 +15,7 @@ type Generator struct {
 	outputDir        string
 	version          *DeploymentVersion // Add version tracking
 	imagePullSecrets []string           // Registry secrets for private images
+	interactiveMode  bool               // Whether to use interactive registry selection
 }
 
 // NewGenerator creates a new manifest generator
@@ -31,6 +32,25 @@ func NewGenerator(cfg *Config) *Generator {
 		outputDir:        manifestsDir,
 		version:          nil,
 		imagePullSecrets: []string{},
+		interactiveMode:  true, // Default to interactive mode
+	}
+}
+
+// NewGeneratorWithMode creates a new manifest generator with specified interaction mode
+func NewGeneratorWithMode(cfg *Config, interactive bool) *Generator {
+	// Get manifests directory from global config
+	manifestsDir, err := config.GetManifestsDir()
+	if err != nil {
+		// Fallback to local directory on error
+		manifestsDir = "manifests"
+	}
+	
+	return &Generator{
+		config:           cfg,
+		outputDir:        manifestsDir,
+		version:          nil,
+		imagePullSecrets: []string{},
+		interactiveMode:  interactive,
 	}
 }
 
@@ -48,6 +68,25 @@ func NewGeneratorWithVersion(cfg *Config, version *DeploymentVersion) *Generator
 		outputDir:        manifestsDir,
 		version:          version,
 		imagePullSecrets: []string{},
+		interactiveMode:  true, // Default to interactive mode
+	}
+}
+
+// NewGeneratorWithVersionAndMode creates a new manifest generator with version tracking and interaction mode
+func NewGeneratorWithVersionAndMode(cfg *Config, version *DeploymentVersion, interactive bool) *Generator {
+	// Get manifests directory from global config
+	manifestsDir, err := config.GetManifestsDir()
+	if err != nil {
+		// Fallback to local directory on error
+		manifestsDir = "manifests"
+	}
+	
+	return &Generator{
+		config:           cfg,
+		outputDir:        manifestsDir,
+		version:          version,
+		imagePullSecrets: []string{},
+		interactiveMode:  interactive,
 	}
 }
 

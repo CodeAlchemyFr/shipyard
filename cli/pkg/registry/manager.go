@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,15 +16,13 @@ import (
 
 // Registry represents a container registry configuration
 type Registry struct {
-	ID           int64     `json:"id"`
-	RegistryURL  string    `json:"registry_url"`
-	Username     string    `json:"username"`
-	Password     string    `json:"password"` // Encrypted
-	Email        string    `json:"email"`
-	RegistryType string    `json:"registry_type"`
-	IsDefault    bool      `json:"is_default"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID          int64     `json:"id"`
+	RegistryURL string    `json:"registry_url"`
+	Username    string    `json:"username"`
+	Password    string    `json:"password"` // Encrypted (token)
+	IsDefault   bool      `json:"is_default"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // Manager handles registry credentials
@@ -49,8 +48,8 @@ func NewManager() (*Manager, error) {
 	}, nil
 }
 
-// AddRegistry adds a new registry credential
-func (m *Manager) AddRegistry(registryURL, username, password, email, registryType string, isDefault bool) error {
+// AddRegistry adds a new registry credential (simplified)
+func (m *Manager) AddRegistry(registryURL, username, password string, isDefault bool) error {
 	// Encrypt password
 	encryptedPassword, err := m.encrypt(password)
 	if err != nil {
@@ -62,10 +61,10 @@ func (m *Manager) AddRegistry(registryURL, username, password, email, registryTy
 
 	// Insert registry
 	query := `
-		INSERT INTO registry_credentials (registry_url, username, password, email, registry_type, is_default)
-		VALUES (?, ?, ?, ?, ?, ?)`
+		INSERT INTO registry_credentials (registry_url, username, password, is_default)
+		VALUES (?, ?, ?, ?)`
 
-	_, err = m.db.GetConnection().Exec(query, registryURL, username, encryptedPassword, email, registryType, isDefault)
+	_, err = m.db.GetConnection().Exec(query, registryURL, username, encryptedPassword, isDefault)
 	if err != nil {
 		return fmt.Errorf("failed to add registry: %w", err)
 	}
@@ -78,7 +77,7 @@ func (m *Manager) GetRegistry(registryURL string) (*Registry, error) {
 	registryURL = normalizeRegistryURL(registryURL)
 
 	query := `
-		SELECT id, registry_url, username, password, email, registry_type, is_default, created_at, updated_at
+		SELECT id, registry_url, username, password, is_default, created_at, updated_at
 		FROM registry_credentials
 		WHERE registry_url = ?`
 
@@ -90,8 +89,6 @@ func (m *Manager) GetRegistry(registryURL string) (*Registry, error) {
 		&registry.RegistryURL,
 		&registry.Username,
 		&encryptedPassword,
-		&registry.Email,
-		&registry.RegistryType,
 		&registry.IsDefault,
 		&registry.CreatedAt,
 		&registry.UpdatedAt,
@@ -127,7 +124,7 @@ func (m *Manager) GetRegistryForImage(image string) (*Registry, error) {
 // GetDefaultRegistry gets the default registry
 func (m *Manager) GetDefaultRegistry() (*Registry, error) {
 	query := `
-		SELECT id, registry_url, username, password, email, registry_type, is_default, created_at, updated_at
+		SELECT id, registry_url, username, password, is_default, created_at, updated_at
 		FROM registry_credentials
 		WHERE is_default = 1
 		LIMIT 1`
@@ -140,8 +137,6 @@ func (m *Manager) GetDefaultRegistry() (*Registry, error) {
 		&registry.RegistryURL,
 		&registry.Username,
 		&encryptedPassword,
-		&registry.Email,
-		&registry.RegistryType,
 		&registry.IsDefault,
 		&registry.CreatedAt,
 		&registry.UpdatedAt,
@@ -162,7 +157,7 @@ func (m *Manager) GetDefaultRegistry() (*Registry, error) {
 // ListRegistries lists all registries
 func (m *Manager) ListRegistries() ([]Registry, error) {
 	query := `
-		SELECT id, registry_url, username, password, email, registry_type, is_default, created_at, updated_at
+		SELECT id, registry_url, username, password, is_default, created_at, updated_at
 		FROM registry_credentials
 		ORDER BY is_default DESC, registry_url`
 
@@ -182,8 +177,6 @@ func (m *Manager) ListRegistries() ([]Registry, error) {
 			&registry.RegistryURL,
 			&registry.Username,
 			&encryptedPassword,
-			&registry.Email,
-			&registry.RegistryType,
 			&registry.IsDefault,
 			&registry.CreatedAt,
 			&registry.UpdatedAt,
@@ -349,11 +342,199 @@ func (m *Manager) CreateDockerConfigSecret(registry *Registry) (map[string]inter
 			registry.RegistryURL: map[string]interface{}{
 				"username": registry.Username,
 				"password": registry.Password,
-				"email":    registry.Email,
 				"auth":     auth,
 			},
 		},
 	}
 	
 	return config, nil
+}
+
+// SelectRegistriesInteractive allows user to interactively select registries for imagePullSecrets
+func (m *Manager) SelectRegistriesInteractive(imageName string) ([]*Registry, error) {
+	// List available registries
+	registries, err := m.ListRegistriesForSelection()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list registries: %w", err)
+	}
+
+	fmt.Printf("🐳 Select registry secrets for image: %s\n\n", imageName)
+	
+	if len(registries) > 0 {
+		fmt.Println("Available registries:")
+		for i, registry := range registries {
+			defaultMarker := ""
+			if registry.IsDefault {
+				defaultMarker = " (default)"
+			}
+			fmt.Printf("  %d. %s%s\n", i+1, registry.RegistryURL, defaultMarker)
+		}
+		fmt.Printf("  %d. Custom registry (enter manually)\n", len(registries)+1)
+	} else {
+		fmt.Println("No registries configured.")
+		fmt.Println("  1. Custom registry (enter manually)")
+	}
+	
+	fmt.Println("  0. None (skip registry secrets)")
+	fmt.Println()
+
+	// Auto-suggest based on image
+	var suggestedRegistry *Registry
+	if len(registries) > 0 {
+		suggestedRegistry = m.findMatchingRegistry(registries, imageName)
+		if suggestedRegistry != nil {
+			fmt.Printf("💡 Suggested registry for '%s': %s\n", imageName, suggestedRegistry.RegistryURL)
+			fmt.Printf("   Press Enter to use suggested registry, or type numbers to select others.\n")
+		}
+	}
+
+	fmt.Print("\nSelect registries (comma-separated, e.g., 1,2 or press Enter for suggestion): ")
+	
+	// Read user input
+	var input string
+	fmt.Scanln(&input)
+
+	// Handle empty input (use suggestion)
+	if strings.TrimSpace(input) == "" && suggestedRegistry != nil {
+		return []*Registry{suggestedRegistry}, nil
+	}
+	
+	if strings.TrimSpace(input) == "" || input == "0" {
+		fmt.Println("✅ No registry secrets will be used")
+		return []*Registry{}, nil
+	}
+
+	// Parse selections
+	selected := []*Registry{}
+	selections := strings.Split(strings.TrimSpace(input), ",")
+	
+	for _, selection := range selections {
+		selection = strings.TrimSpace(selection)
+		if selection == "" || selection == "0" {
+			continue
+		}
+		
+		index, err := strconv.Atoi(selection)
+		if err != nil || index < 1 || index > len(registries)+1 {
+			fmt.Printf("⚠️  Invalid selection: %s (must be 1-%d)\n", selection, len(registries)+1)
+			continue
+		}
+		
+		// Check if it's the custom registry option
+		if index == len(registries)+1 {
+			customRegistry, err := m.promptForCustomRegistry()
+			if err != nil {
+				fmt.Printf("⚠️  Failed to create custom registry: %v\n", err)
+				continue
+			}
+			if customRegistry != nil {
+				selected = append(selected, customRegistry)
+				fmt.Printf("✅ Added custom registry: %s\n", customRegistry.RegistryURL)
+			}
+		} else {
+			// Existing registry
+			registry := registries[index-1]
+			
+			// Decrypt password for the selected registry
+			decryptedRegistry, err := m.GetRegistry(registry.RegistryURL)
+			if err != nil {
+				fmt.Printf("⚠️  Failed to get registry %s: %v\n", registry.RegistryURL, err)
+				continue
+			}
+			
+			selected = append(selected, decryptedRegistry)
+			fmt.Printf("✅ Selected: %s\n", registry.RegistryURL)
+		}
+	}
+	
+	if len(selected) == 0 {
+		fmt.Println("✅ No registry secrets will be used")
+	}
+	
+	return selected, nil
+}
+
+// ListRegistriesForSelection lists all registries for user selection (without decrypted passwords)
+func (m *Manager) ListRegistriesForSelection() ([]Registry, error) {
+	return m.ListRegistries()
+}
+
+// findMatchingRegistry finds the best matching registry for an image
+func (m *Manager) findMatchingRegistry(registries []Registry, imageName string) *Registry {
+	imageRegistry := extractRegistryFromImage(imageName)
+	
+	// Look for exact match
+	for _, registry := range registries {
+		if registry.RegistryURL == imageRegistry {
+			return &registry
+		}
+	}
+	
+	// Look for default registry
+	for _, registry := range registries {
+		if registry.IsDefault {
+			return &registry
+		}
+	}
+	
+	return nil
+}
+
+// promptForCustomRegistry prompts user to enter custom registry credentials
+func (m *Manager) promptForCustomRegistry() (*Registry, error) {
+	fmt.Println("\n📝 Enter custom registry details:")
+	
+	var registryURL, username, password string
+	
+	fmt.Print("Registry URL (e.g., ghcr.io, docker.io, myregistry.com): ")
+	fmt.Scanln(&registryURL)
+	
+	if strings.TrimSpace(registryURL) == "" {
+		fmt.Println("❌ Registry URL cannot be empty")
+		return nil, nil
+	}
+	
+	fmt.Print("Username: ")
+	fmt.Scanln(&username)
+	
+	if strings.TrimSpace(username) == "" {
+		fmt.Println("❌ Username cannot be empty")
+		return nil, nil
+	}
+	
+	fmt.Print("Password/Token: ")
+	fmt.Scanln(&password)
+	
+	if strings.TrimSpace(password) == "" {
+		fmt.Println("❌ Password/Token cannot be empty")
+		return nil, nil
+	}
+	
+	// Normalize registry URL
+	registryURL = normalizeRegistryURL(registryURL)
+	
+	// Create temporary registry (not saved to DB)
+	registry := &Registry{
+		RegistryURL: registryURL,
+		Username:    username,
+		Password:    password,
+		IsDefault:   false,
+	}
+	
+	fmt.Printf("✅ Custom registry created: %s (username: %s)\n", registryURL, username)
+	
+	return registry, nil
+}
+
+// SelectRegistriesAuto automatically selects the best matching registry for an image
+func (m *Manager) SelectRegistriesAuto(imageName string) ([]*Registry, error) {
+	// Get registry for the app image (existing logic)
+	imageRegistry, err := m.GetRegistryForImage(imageName)
+	if err != nil {
+		// No registry needed, return empty list
+		return []*Registry{}, nil
+	}
+
+	fmt.Printf("🔐 Auto-selected registry: %s for image %s\n", imageRegistry.RegistryURL, imageName)
+	return []*Registry{imageRegistry}, nil
 }
