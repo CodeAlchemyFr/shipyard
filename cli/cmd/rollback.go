@@ -174,7 +174,7 @@ func runRollbackInteractive() error {
 	fmt.Println("─────────────────────────────────────────────────────────────────────────")
 
 	successfulVersions := []manifests.DeploymentVersion{}
-	for i, version := range versions {
+	for _, version := range versions {
 		// Only show successful deployments for rollback
 		if version.Status == "success" {
 			successfulVersions = append(successfulVersions, version)
