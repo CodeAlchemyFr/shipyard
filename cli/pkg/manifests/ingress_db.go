@@ -44,7 +44,7 @@ spec:
           service:
             name: {{ .AppName }}
             port:
-              number: {{ .AppPort }}
+              number: {{ $.AppPort }}
   {{- end }}
 `
 
