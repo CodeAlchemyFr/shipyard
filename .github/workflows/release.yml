@@ -225,7 +225,40 @@ jobs:
                 # Create Let's Encrypt ClusterIssuer
                 echo -e "${BLUE}📄 Creating Let's Encrypt ClusterIssuer...${NC}"
                 echo -e "${YELLOW}📧 Please provide an email for Let's Encrypt certificates:${NC}"
-                read -p "Email: " SSL_EMAIL
+                
+                # Handle case where stdin is not available (curl | bash)
+                if [ ! -t 0 ]; then
+                  echo -e "${RED}❌ Cannot read email from stdin when piping to bash${NC}"
+                  echo -e "${YELLOW}📝 Please run the following command to configure Let's Encrypt:${NC}"
+                  echo ""
+                  echo "kubectl apply -f - <<EOF"
+                  echo "apiVersion: cert-manager.io/v1"
+                  echo "kind: ClusterIssuer"
+                  echo "metadata:"
+                  echo "  name: letsencrypt-prod"
+                  echo "spec:"
+                  echo "  acme:"
+                  echo "    server: https://acme-v02.api.letsencrypt.org/directory"
+                  echo "    email: YOUR_EMAIL@example.com  # Replace with your email"
+                  echo "    privateKeySecretRef:"
+                  echo "      name: letsencrypt-prod"
+                  echo "    solvers:"
+                  echo "    - http01:"
+                  echo "        ingress:"
+                  echo "          class: traefik"
+                  echo "EOF"
+                  echo ""
+                  echo -e "${BLUE}📚 Or download the script and run it interactively:${NC}"
+                  echo "curl -sSL https://github.com/CodeAlchemyFr/shipyard/releases/latest/download/install.sh -o install.sh"
+                  echo "chmod +x install.sh"
+                  echo "./install.sh"
+                  
+                  # Create a basic ClusterIssuer that needs manual email configuration
+                  SSL_EMAIL="REPLACE_WITH_YOUR_EMAIL"
+                  echo -e "${YELLOW}⚠️  Creating ClusterIssuer with placeholder email - manual configuration required${NC}"
+                else
+                  read -p "Email: " SSL_EMAIL
+                fi
                 cat <<ISSUER_EOF | kubectl apply -f -
           apiVersion: cert-manager.io/v1
           kind: ClusterIssuer
