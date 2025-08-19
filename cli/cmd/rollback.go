@@ -150,9 +150,17 @@ func runRollbackInteractive() error {
 	versionManager := manifests.NewVersionManager(config.App.Name)
 
 	// Get deployment history
-	versions, err := versionManager.GetVersionHistory(10) // Get last 10 versions
+	versionPointers, err := versionManager.ListVersions(10) // Get last 10 versions
 	if err != nil {
 		return fmt.Errorf("failed to get deployment history: %w", err)
+	}
+
+	// Convert []*DeploymentVersion to []DeploymentVersion for easier handling
+	versions := make([]manifests.DeploymentVersion, 0, len(versionPointers))
+	for _, v := range versionPointers {
+		if v != nil {
+			versions = append(versions, *v)
+		}
 	}
 
 	if len(versions) == 0 {
