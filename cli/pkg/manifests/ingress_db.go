@@ -44,7 +44,7 @@ spec:
           service:
             name: {{ .AppName }}
             port:
-              number: 80
+              number: {{ .AppPort }}
   {{- end }}
 `
 
@@ -104,15 +104,23 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 		}
 	}
 
+	// Get app port from config, default to 80 if not available
+	appPort := 80
+	if g.config != nil && g.config.App.Port > 0 {
+		appPort = g.config.App.Port
+	}
+
 	// Prepare template data
 	ingressData := struct {
 		BaseDomain string
 		Domains    []domains.Domain
 		SSLEnabled bool
+		AppPort    int
 	}{
 		BaseDomain: baseDomain,
 		Domains:    domainList,
 		SSLEnabled: sslEnabled,
+		AppPort:    appPort,
 	}
 
 	tmpl, err := template.New("ingress").Parse(ingressTemplateDomain)

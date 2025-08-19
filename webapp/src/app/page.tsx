@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,11 @@ interface PaasConfig {
   name: string
   image: string
   port: number
-  externalPort: number
+  service: {
+    exposePublic: boolean
+    type: 'ClusterIP' | 'NodePort'
+    externalPort?: number
+  }
   resources: {
     cpu: string
     memory: string
@@ -38,10 +42,13 @@ interface PaasConfig {
 
 export default function Home() {
   const [config, setConfig] = useState<PaasConfig>({
-    name: '',
-    image: '',
+    name: 'my-app',
+    image: 'nginx:latest',
     port: 3000,
-    externalPort: 80,
+    service: {
+      exposePublic: false,
+      type: 'ClusterIP'
+    },
     resources: {
       cpu: '100m',
       memory: '128Mi'
@@ -77,10 +84,25 @@ export default function Home() {
   }
 
   const generateYaml = () => {
-    let yaml = `app:
+    if (!config.name || !config.image) return ''
+    
+    let yaml = `# Shipyard Application Configuration
+# Generated automatically
+
+app:
   name: ${config.name}
   image: ${config.image}
   port: ${config.port}
+
+service:
+  type: ${config.service.type}`
+
+    if (config.service.type === 'NodePort' && config.service.externalPort) {
+      yaml += `
+  externalPort: ${config.service.externalPort}`
+    }
+
+    yaml += `
 
 resources:
   cpu: ${config.resources.cpu}
@@ -90,13 +112,6 @@ scaling:
   min: ${config.scaling.min}
   max: ${config.scaling.max}
   target_cpu: ${config.scaling.targetCPU}`
-
-    if (config.externalPort && config.externalPort !== 80) {
-      yaml += `
-
-service:
-  externalPort: ${config.externalPort}`
-    }
 
     if (config.env.length > 0) {
       yaml += `
@@ -132,8 +147,14 @@ health:
     path: ${config.health.readiness.path}`
     }
 
-    setGeneratedYaml(yaml)
+    return yaml
   }
+
+  // Real-time YAML generation
+  useEffect(() => {
+    const yaml = generateYaml()
+    setGeneratedYaml(yaml)
+  }, [config])
 
   const updateImageFromRegistry = () => {
     if (selectedRegistry && imageName) {
@@ -274,27 +295,74 @@ health:
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="port">Port interne</Label>
-                  <Input
-                    id="port"
-                    type="number"
-                    placeholder="3000"
-                    value={config.port}
-                    onChange={(e) => setConfig({...config, port: parseInt(e.target.value) || 3000})}
+              <div>
+                <Label htmlFor="port">Port de l'application</Label>
+                <Input
+                  id="port"
+                  type="number"
+                  placeholder="3000"
+                  value={config.port}
+                  onChange={(e) => setConfig({...config, port: parseInt(e.target.value) || 3000})}
+                />
+                <p className="text-xs text-gray-500 mt-1">Port exposé par votre image Docker</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Service Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Configuration du Service</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="exposePublic"
+                    checked={config.service.exposePublic}
+                    onChange={(e) => {
+                      const exposePublic = e.target.checked
+                      setConfig({
+                        ...config, 
+                        service: {
+                          ...config.service,
+                          exposePublic,
+                          type: exposePublic ? 'NodePort' : 'ClusterIP',
+                          externalPort: exposePublic ? config.service.externalPort || 30000 : undefined
+                        }
+                      })
+                    }}
                   />
+                  <Label htmlFor="exposePublic">Souhaitez-vous exposer un port publique?</Label>
                 </div>
-                <div>
-                  <Label htmlFor="externalPort">Port externe</Label>
-                  <Input
-                    id="externalPort"
-                    type="number"
-                    placeholder="80"
-                    value={config.externalPort}
-                    onChange={(e) => setConfig({...config, externalPort: parseInt(e.target.value) || 80})}
-                  />
-                </div>
+                <p className="text-sm text-gray-600">
+                  {config.service.exposePublic 
+                    ? "🌐 Service NodePort - accessible depuis l'extérieur du cluster" 
+                    : "🔒 Service ClusterIP - accessible uniquement dans le cluster"}
+                </p>
+                
+                {config.service.exposePublic && (
+                  <div>
+                    <Label htmlFor="externalPort">Port externe (NodePort)</Label>
+                    <Input
+                      id="externalPort"
+                      type="number"
+                      placeholder="30000"
+                      min="30000"
+                      max="32767"
+                      value={config.service.externalPort || ''}
+                      onChange={(e) => setConfig({
+                        ...config, 
+                        service: {
+                          ...config.service,
+                          externalPort: parseInt(e.target.value) || 30000
+                        }
+                      })}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Port entre 30000-32767 pour accès externe</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -503,9 +571,9 @@ health:
             </CardContent>
           </Card>
 
-          <Button onClick={generateYaml} className="w-full" disabled={!config.name || !config.image}>
-            Générer paas.yaml
-          </Button>
+          <div className="text-center text-sm text-gray-500">
+            ⚡ Le YAML se génère automatiquement en temps réel
+          </div>
         </div>
 
         {/* Generated YAML */}
@@ -546,7 +614,7 @@ health:
               </div>
             ) : (
               <div className="text-center text-gray-500 py-8">
-                Remplissez le formulaire et cliquez sur "Générer paas.yaml" pour voir le résultat
+                Remplissez le formulaire pour voir le paas.yaml généré automatiquement
               </div>
             )}
           </CardContent>
