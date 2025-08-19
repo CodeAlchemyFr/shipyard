@@ -173,6 +173,36 @@ jobs:
                 mkdir -p ~/.kube
                 sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
                 sudo chown $(id -u):$(id -g) ~/.kube/config
+                
+                # Also fix permissions on the original file
+                sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+                
+                # Set KUBECONFIG environment variable permanently
+                export KUBECONFIG=~/.kube/config
+                
+                # Detect shell and add to appropriate config file
+                SHELL_NAME=$(basename "$SHELL")
+                case "$SHELL_NAME" in
+                  bash)
+                    echo 'export KUBECONFIG=~/.kube/config' >> ~/.bashrc
+                    echo -e "${YELLOW}📝 Added KUBECONFIG to ~/.bashrc${NC}"
+                    ;;
+                  zsh)
+                    echo 'export KUBECONFIG=~/.kube/config' >> ~/.zshrc
+                    echo -e "${YELLOW}📝 Added KUBECONFIG to ~/.zshrc${NC}"
+                    ;;
+                  fish)
+                    mkdir -p ~/.config/fish
+                    echo 'set -gx KUBECONFIG ~/.kube/config' >> ~/.config/fish/config.fish
+                    echo -e "${YELLOW}📝 Added KUBECONFIG to ~/.config/fish/config.fish${NC}"
+                    ;;
+                  *)
+                    echo 'export KUBECONFIG=~/.kube/config' >> ~/.profile
+                    echo -e "${YELLOW}📝 Added KUBECONFIG to ~/.profile (generic shell: $SHELL_NAME)${NC}"
+                    ;;
+                esac
+                
+                # For current session, use the copied config
                 export KUBECONFIG=~/.kube/config
                 
                 echo -e "${GREEN}✅ k3s installed and configured successfully!${NC}"
@@ -184,9 +214,13 @@ jobs:
                 
                 # Wait for cert-manager to be ready
                 echo -e "${YELLOW}⏳ Waiting for cert-manager to be ready...${NC}"
-                kubectl wait --for=condition=ready pod -l app=cert-manager -n cert-manager --timeout=120s 2>/dev/null || true
-                kubectl wait --for=condition=ready pod -l app=cainjector -n cert-manager --timeout=120s 2>/dev/null || true
-                kubectl wait --for=condition=ready pod -l app=webhook -n cert-manager --timeout=120s 2>/dev/null || true
+                kubectl wait --for=condition=ready pod -l app=cert-manager -n cert-manager --timeout=300s 2>/dev/null || true
+                kubectl wait --for=condition=ready pod -l app=cainjector -n cert-manager --timeout=300s 2>/dev/null || true
+                kubectl wait --for=condition=ready pod -l app=webhook -n cert-manager --timeout=300s 2>/dev/null || true
+                
+                # Wait a bit more for webhook to be fully available
+                echo -e "${YELLOW}⏳ Waiting for cert-manager webhook to be available...${NC}"
+                sleep 30
                 
                 # Create Let's Encrypt ClusterIssuer
                 echo -e "${BLUE}📄 Creating Let's Encrypt ClusterIssuer...${NC}"
@@ -241,6 +275,15 @@ jobs:
           else
             echo -e "${YELLOW}⚠️  Please add $INSTALL_DIR to your PATH or restart your terminal${NC}"
           fi
+          
+          # Shell-specific restart instructions
+          SHELL_NAME=$(basename "$SHELL")
+          echo ""
+          echo -e "${BLUE}📝 To use kubectl immediately in this session:${NC}"
+          echo -e "${YELLOW}   export KUBECONFIG=~/.kube/config${NC}"
+          echo ""
+          echo -e "${BLUE}📝 Or restart your terminal to load the new environment variables.${NC}"
+          echo -e "${BLUE}🔄 Your shell config has been updated for future sessions (${SHELL_NAME}).${NC}"
           EOF
           
           # Create install script for Windows (PowerShell)
