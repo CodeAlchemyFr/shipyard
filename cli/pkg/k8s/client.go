@@ -813,3 +813,39 @@ func (c *Client) UpdateEndpointsIP(endpointsName, namespace, ip string, port int
 	
 	return nil
 }
+
+// CopyRegistrySecretsFromDefault copies all registry secrets from default namespace to target namespace
+func (c *Client) CopyRegistrySecretsFromDefault(targetNamespace string) error {
+	// Get all docker registry secrets from default namespace
+	secrets, err := c.clientset.CoreV1().Secrets("default").List(context.TODO(), metav1.ListOptions{
+		FieldSelector: "type=kubernetes.io/dockerconfigjson",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list secrets in default namespace: %w", err)
+	}
+	
+	for _, secret := range secrets.Items {
+		// Create a copy in the target namespace
+		newSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secret.Name,
+				Namespace: targetNamespace,
+				Labels:    secret.Labels,
+			},
+			Type: secret.Type,
+			Data: secret.Data,
+		}
+		
+		// Try to create the secret, ignore if it already exists
+		_, err := c.clientset.CoreV1().Secrets(targetNamespace).Create(context.TODO(), newSecret, metav1.CreateOptions{})
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to copy secret %s to namespace %s: %w", secret.Name, targetNamespace, err)
+		}
+		
+		if err == nil {
+			fmt.Printf("📋 Copied registry secret %s to namespace %s\n", secret.Name, targetNamespace)
+		}
+	}
+	
+	return nil
+}

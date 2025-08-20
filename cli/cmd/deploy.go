@@ -93,6 +93,12 @@ func runDeploy() error {
 		return fmt.Errorf("failed to create k8s client: %w", err)
 	}
 
+	// Copy registry secrets from default to app namespace
+	fmt.Printf("📋 Copying registry secrets to namespace %s...\n", config.App.Name)
+	if err := client.CopyRegistrySecretsFromDefault(config.App.Name); err != nil {
+		fmt.Printf("⚠️  Warning: failed to copy registry secrets: %v\n", err)
+	}
+
 	fmt.Printf("🔧 Applying manifests for %s...\n", config.App.Name)
 	if err := client.ApplyManifests(config.App.Name); err != nil {
 		// Mark deployment as failed
