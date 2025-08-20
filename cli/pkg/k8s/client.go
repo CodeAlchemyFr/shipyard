@@ -92,12 +92,7 @@ func (c *Client) ApplyManifests(appName string) error {
 	}
 	appDir := filepath.Join(appsDir, appName)
 	
-	// Apply app manifests
-	if err := c.applyManifestsFromDir(appDir); err != nil {
-		return fmt.Errorf("failed to apply app manifests: %w", err)
-	}
-
-	// Apply shared ingress manifests
+	// Apply shared manifests first (including namespaces)
 	sharedDir, err := config.GetSharedDir()
 	if err != nil {
 		return fmt.Errorf("failed to get shared directory: %w", err)
@@ -107,6 +102,11 @@ func (c *Client) ApplyManifests(appName string) error {
 		if err := c.applyManifestsFromDir(sharedDir); err != nil {
 			return fmt.Errorf("failed to apply shared manifests: %w", err)
 		}
+	}
+
+	// Apply app manifests after shared manifests
+	if err := c.applyManifestsFromDir(appDir); err != nil {
+		return fmt.Errorf("failed to apply app manifests: %w", err)
 	}
 
 	// Wait for deployment to be ready
