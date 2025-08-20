@@ -1,6 +1,6 @@
-# Shipyard CLI
+# 🚀 Shipyard CLI
 
-CLI pour déployer des applications sur Kubernetes avec simplicité.
+CLI moderne pour déployer des applications sur Kubernetes avec simplicité et interactivité.
 
 ## Installation
 
@@ -49,8 +49,8 @@ app:
   port: 3000
 
 service:
-  type: NodePort
-  externalPort: 30000
+  type: ClusterIP     # ou NodePort pour accès externe
+  # externalPort: 30000  # requis pour NodePort
 
 health:
   liveness:
@@ -161,14 +161,33 @@ Cette commande va :
 3. Créer un ClusterIssuer pour les certificats automatiques
 4. Configurer HTTPS automatique pour vos domaines
 
-### Gestion des domaines
+### Commandes interactives
 
+Shipyard offre des modes interactifs pour une gestion simplifiée :
+
+**Gestion des registries :**
 ```bash
-./shipyard domain add api.mycompany.com   # Ajouter un domaine
-./shipyard domain list                    # Domaines de l'app courante
-./shipyard domain list-all                # Tous les domaines (toutes apps)
-./shipyard domain remove api.old.com      # Supprimer un domaine
+./shipyard registry                       # Mode interactif
 ```
+- Ajouter/supprimer des registries Docker
+- Configurer registry par défaut
+- Configuration simplifiée (URL, username, token uniquement)
+
+**Gestion des domaines :**
+```bash
+./shipyard domain                         # Mode interactif
+```
+- Ajouter/supprimer des domaines avec assistant
+- Configuration SSL automatique
+- Vérification DNS en temps réel
+
+**Rollback interactif :**
+```bash
+./shipyard rollback                       # Mode interactif avec historique
+```
+- Affichage de l'historique des déploiements
+- Sélection visuelle de la version cible
+- Rollback en un clic vers toute version réussie
 
 ## Structure générée
 
