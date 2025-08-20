@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"text/template"
 
 	"github.com/shipyard/cli/pkg/domains"
@@ -42,10 +44,27 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: {{ .AppName }}
+            name: {{ .AppName }}-proxy
             port:
               number: {{ $.AppPort }}
   {{- end }}
+---
+{{- range .Domains }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .AppName }}-proxy
+  labels:
+    managed-by: shipyard
+    app: {{ .AppName }}
+    proxy-for: {{ .AppName }}
+spec:
+  type: ExternalName
+  externalName: {{ .AppName }}.{{ .AppNamespace }}.svc.cluster.local
+  ports:
+  - port: {{ $.AppPort }}
+    targetPort: {{ $.AppPort }}
+{{- end }}
 `
 
 // GenerateIngressFromDatabase generates ingress files based on domains in database
@@ -110,15 +129,34 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 		appPort = g.config.App.Port
 	}
 
+	// Enhance domain data with normalized names
+	enhancedDomains := make([]struct {
+		domains.Domain
+		AppNamespace string
+	}, len(domainList))
+	
+	for i, domain := range domainList {
+		enhancedDomains[i] = struct {
+			domains.Domain
+			AppNamespace string
+		}{
+			Domain:       domain,
+			AppNamespace: normalizeDNSName(domain.AppName),
+		}
+	}
+
 	// Prepare template data
 	ingressData := struct {
 		BaseDomain string
-		Domains    []domains.Domain
+		Domains    []struct {
+			domains.Domain
+			AppNamespace string
+		}
 		SSLEnabled bool
 		AppPort    int
 	}{
 		BaseDomain: baseDomain,
-		Domains:    domainList,
+		Domains:    enhancedDomains,
 		SSLEnabled: sslEnabled,
 		AppPort:    appPort,
 	}
@@ -139,6 +177,31 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 	}
 
 	return nil
+}
+
+// normalizeDNSName converts a string to be DNS-1035 compliant
+func normalizeDNSName(name string) string {
+	// Convert to lowercase and replace underscores with hyphens
+	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	
+	// Remove any characters that aren't alphanumeric or hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]`)
+	result = reg.ReplaceAllString(result, "")
+	
+	// Ensure it starts with a letter
+	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
+		result = "app-" + result
+	}
+	
+	// Ensure it doesn't start or end with hyphen
+	result = strings.Trim(result, "-")
+	
+	// If empty after cleaning, use a default
+	if result == "" {
+		result = "my-app"
+	}
+	
+	return result
 }
 
 // UpdateIngressFromDatabase updates ingress files based on current database state
