@@ -271,7 +271,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- [Documentation](https://codealchemy.github.io/shipyard/)
+- [Documentation](https://codealchemyfr.github.io/shipyard/)
 - [GitHub Repository](https://github.com/CodeAlchemyFr/shipyard)
 - [Issues & Bug Reports](https://github.com/CodeAlchemyFr/shipyard/issues)
 - [Releases](https://github.com/CodeAlchemyFr/shipyard/releases)
