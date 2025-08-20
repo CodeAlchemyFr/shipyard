@@ -181,8 +181,8 @@ func (c *Client) applyYAMLDocument(data []byte) error {
 		return fmt.Errorf("failed to decode YAML: %w", err)
 	}
 
-	// Set namespace if not specified
-	if obj.GetNamespace() == "" {
+	// Set namespace if not specified (except for cluster-scoped resources like Namespace)
+	if obj.GetNamespace() == "" && obj.GetKind() != "Namespace" {
 		obj.SetNamespace(c.namespace)
 	}
 
@@ -192,14 +192,22 @@ func (c *Client) applyYAMLDocument(data []byte) error {
 		return fmt.Errorf("failed to get GVR: %w", err)
 	}
 
+	// Determine if resource is cluster-scoped or namespaced
+	var resourceClient dynamic.ResourceInterface
+	if obj.GetKind() == "Namespace" {
+		// Cluster-scoped resource
+		resourceClient = c.dynamicClient.Resource(gvr)
+	} else {
+		// Namespaced resource
+		resourceClient = c.dynamicClient.Resource(gvr).Namespace(obj.GetNamespace())
+	}
+
 	// Try to get existing resource
-	existing, err := c.dynamicClient.Resource(gvr).Namespace(obj.GetNamespace()).Get(
-		context.TODO(), obj.GetName(), metav1.GetOptions{})
+	existing, err := resourceClient.Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 	
 	if errors.IsNotFound(err) {
 		// Create new resource
-		_, err = c.dynamicClient.Resource(gvr).Namespace(obj.GetNamespace()).Create(
-			context.TODO(), obj, metav1.CreateOptions{})
+		_, err = resourceClient.Create(context.TODO(), obj, metav1.CreateOptions{})
 		return err
 	} else if err != nil {
 		return err
@@ -207,8 +215,7 @@ func (c *Client) applyYAMLDocument(data []byte) error {
 
 	// Update existing resource
 	obj.SetResourceVersion(existing.GetResourceVersion())
-	_, err = c.dynamicClient.Resource(gvr).Namespace(obj.GetNamespace()).Update(
-		context.TODO(), obj, metav1.UpdateOptions{})
+	_, err = resourceClient.Update(context.TODO(), obj, metav1.UpdateOptions{})
 	
 	return err
 }
@@ -695,8 +702,8 @@ func (c *Client) deleteYAMLDocument(data []byte) error {
 		return fmt.Errorf("failed to decode YAML: %w", err)
 	}
 
-	// Set namespace if not specified
-	if obj.GetNamespace() == "" {
+	// Set namespace if not specified (except for cluster-scoped resources like Namespace)
+	if obj.GetNamespace() == "" && obj.GetKind() != "Namespace" {
 		obj.SetNamespace(c.namespace)
 	}
 
@@ -707,8 +714,16 @@ func (c *Client) deleteYAMLDocument(data []byte) error {
 	}
 
 	// Delete the resource
-	err = c.dynamicClient.Resource(gvr).Namespace(obj.GetNamespace()).Delete(
-		context.TODO(), obj.GetName(), metav1.DeleteOptions{})
+	var resourceClient dynamic.ResourceInterface
+	if obj.GetKind() == "Namespace" {
+		// Cluster-scoped resource
+		resourceClient = c.dynamicClient.Resource(gvr)
+	} else {
+		// Namespaced resource
+		resourceClient = c.dynamicClient.Resource(gvr).Namespace(obj.GetNamespace())
+	}
+	
+	err = resourceClient.Delete(context.TODO(), obj.GetName(), metav1.DeleteOptions{})
 	
 	if errors.IsNotFound(err) {
 		// Resource already deleted, that's fine
