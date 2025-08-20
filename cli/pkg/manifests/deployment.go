@@ -42,7 +42,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .App.Name }}
-        image: {{ if .CICD.Enabled }}{{ .CICD.ImageTag | default "${IMAGE_TAG}" }}{{ else }}{{ .App.Image }}{{ end }}
+        image: {{ if .CICD.Enabled }}{{ if .CICD.ImageTag }}{{ .CICD.ImageTag }}{{ else }}${IMAGE_TAG}{{ end }}{{ else }}{{ .App.Image }}{{ end }}
         ports:
         - containerPort: {{ .App.Port }}
         env:

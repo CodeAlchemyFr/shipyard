@@ -19,6 +19,10 @@ interface PaasConfig {
     type: 'ClusterIP' | 'NodePort'
     externalPort?: number
   }
+  cicd: {
+    enabled: boolean
+    imageTag?: string
+  }
   resources: {
     cpu: string
     memory: string
@@ -49,6 +53,10 @@ export default function Home() {
     service: {
       exposePublic: false,
       type: 'ClusterIP'
+    },
+    cicd: {
+      enabled: false,
+      imageTag: '${IMAGE_TAG}'
     },
     resources: {
       cpu: '100m',
@@ -98,6 +106,17 @@ app:
 
 service:
   type: ${config.service.type}`
+
+    if (config.cicd.enabled) {
+      yaml += `
+
+cicd:
+  enabled: true`
+      if (config.cicd.imageTag && config.cicd.imageTag !== '${IMAGE_TAG}') {
+        yaml += `
+  image_tag: "${config.cicd.imageTag}"`
+      }
+    }
 
     if (config.service.type === 'NodePort' && config.service.externalPort) {
       yaml += `
@@ -319,6 +338,45 @@ health:
                 />
                 <p className="text-xs text-gray-500 mt-1">Si non spécifié, le nom de l'application sera utilisé comme namespace</p>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* CI/CD Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle>⚙️ Configuration CI/CD</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="cicdEnabled"
+                  checked={config.cicd.enabled}
+                  onChange={(e) => setConfig({...config, cicd: {...config.cicd, enabled: e.target.checked}})}
+                />
+                <Label htmlFor="cicdEnabled">Activer le mode CI/CD</Label>
+              </div>
+              <div className="text-sm text-gray-600 space-y-2">
+                <p><strong>🎯 Mode CI/CD activé :</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Premier déploiement avec l'image réelle spécifiée</li>
+                  <li>Image automatiquement remplacée par <code className="bg-gray-100 px-1 rounded">${"{IMAGE_TAG}"}</code></li>
+                  <li>Permet les mises à jour via <code className="bg-gray-100 px-1 rounded">kubectl set image</code></li>
+                </ul>
+              </div>
+              
+              {config.cicd.enabled && (
+                <div>
+                  <Label htmlFor="imageTag">Placeholder pour l'image (optionnel)</Label>
+                  <Input
+                    id="imageTag"
+                    placeholder="${IMAGE_TAG}"
+                    value={config.cicd.imageTag || ''}
+                    onChange={(e) => setConfig({...config, cicd: {...config.cicd, imageTag: e.target.value || '${IMAGE_TAG}'}})}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Par défaut: ${"IMAGE_TAG"}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
