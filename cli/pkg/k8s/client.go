@@ -781,3 +781,35 @@ func (c *Client) GetServiceClusterIP(serviceName, namespace string) (string, err
 	
 	return service.Spec.ClusterIP, nil
 }
+
+// UpdateEndpointsIP updates the IP address in an endpoints object
+func (c *Client) UpdateEndpointsIP(endpointsName, namespace, ip string, port int) error {
+	endpoints, err := c.clientset.CoreV1().Endpoints(namespace).Get(context.TODO(), endpointsName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get endpoints %s: %w", endpointsName, err)
+	}
+	
+	// Update the IP address
+	if len(endpoints.Subsets) > 0 && len(endpoints.Subsets[0].Addresses) > 0 {
+		endpoints.Subsets[0].Addresses[0].IP = ip
+	} else {
+		// Create new subset if none exists
+		endpoints.Subsets = []corev1.EndpointSubset{
+			{
+				Addresses: []corev1.EndpointAddress{
+					{IP: ip},
+				},
+				Ports: []corev1.EndpointPort{
+					{Port: int32(port)},
+				},
+			},
+		}
+	}
+	
+	_, err = c.clientset.CoreV1().Endpoints(namespace).Update(context.TODO(), endpoints, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update endpoints %s: %w", endpointsName, err)
+	}
+	
+	return nil
+}

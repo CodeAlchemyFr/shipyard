@@ -141,13 +141,7 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 		appPort = g.config.App.Port
 	}
 
-	// Create k8s client to resolve service IPs
-	client, err := k8s.NewClient()
-	if err != nil {
-		return fmt.Errorf("failed to create k8s client: %w", err)
-	}
-
-	// Enhance domain data with normalized names and service IPs
+	// Enhance domain data with normalized names
 	enhancedDomains := make([]struct {
 		domains.Domain
 		AppNamespace string
@@ -155,12 +149,6 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 	}, len(domainList))
 	
 	for i, domain := range domainList {
-		// Get service IP
-		serviceIP, err := client.GetServiceClusterIP(domain.AppName, domain.AppName)
-		if err != nil {
-			return fmt.Errorf("failed to get service IP for %s: %w", domain.AppName, err)
-		}
-
 		enhancedDomains[i] = struct {
 			domains.Domain
 			AppNamespace string
@@ -168,7 +156,7 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 		}{
 			Domain:       domain,
 			AppNamespace: domain.AppName, // Use original name since we removed normalization
-			ServiceIP:    serviceIP,
+			ServiceIP:    "SERVICE_IP_PLACEHOLDER", // Will be updated after deployment
 		}
 	}
 
@@ -227,6 +215,59 @@ func (g *Generator) UpdateIngressFromDatabase(appName string) error {
 
 	// Generate all ingress files from database
 	return g.GenerateIngressFromDatabase()
+}
+
+// UpdateIngressServiceIPs updates the ingress endpoints with actual service IPs after deployment
+func (g *Generator) UpdateIngressServiceIPs() error {
+	// Create k8s client to resolve service IPs
+	client, err := k8s.NewClient()
+	if err != nil {
+		return fmt.Errorf("failed to create k8s client: %w", err)
+	}
+
+	// Create domain manager
+	domainManager, err := domains.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to create domain manager: %w", err)
+	}
+	defer domainManager.Close()
+
+	// Get all base domains
+	baseDomains, err := domainManager.GetBaseDomains()
+	if err != nil {
+		return fmt.Errorf("failed to get base domains: %w", err)
+	}
+
+	// Update each base domain's ingress
+	for _, baseDomain := range baseDomains {
+		domainsForBase, err := domainManager.GetDomainsByBaseDomain(baseDomain)
+		if err != nil {
+			return fmt.Errorf("failed to get domains for %s: %w", baseDomain, err)
+		}
+
+		if len(domainsForBase) == 0 {
+			continue
+		}
+
+		// Get the service IP for this domain
+		domain := domainsForBase[0]
+		serviceIP, err := client.GetServiceClusterIP(domain.AppName, domain.AppName)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Failed to get service IP for %s: %v\n", domain.AppName, err)
+			continue
+		}
+
+		// Update the endpoints
+		err = client.UpdateEndpointsIP(domain.AppName+"-proxy", "default", serviceIP, g.config.App.Port)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Failed to update endpoints for %s: %v\n", domain.AppName, err)
+			continue
+		}
+
+		fmt.Printf("✅ Updated ingress endpoints for %s (IP: %s)\n", baseDomain, serviceIP)
+	}
+
+	return nil
 }
 
 // CleanupIngressFiles removes ingress files for base domains that no longer have domains

@@ -131,6 +131,12 @@ func runDeploy() error {
 		}
 	}
 
+	// Update ingress service IPs after successful deployment
+	fmt.Printf("🔗 Updating ingress service endpoints...\n")
+	if err := generator.UpdateIngressServiceIPs(); err != nil {
+		fmt.Printf("⚠️  Warning: failed to update ingress endpoints: %v\n", err)
+	}
+
 	fmt.Printf("✅ Deployment successful!\n")
 	fmt.Printf("   App: %s\n", config.App.Name)
 	fmt.Printf("   Version: %s\n", deployVersion.Version)
