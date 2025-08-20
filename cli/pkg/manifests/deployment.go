@@ -10,10 +10,10 @@ import (
 const deploymentTemplate = `apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .App.Name }}
+  name: {{ .App.GetDNSName }}
   namespace: {{ .App.GetNamespace }}
   labels:
-    app: {{ .App.Name }}
+    app: {{ .App.GetDNSName }}
     managed-by: shipyard
     {{- if .Version }}
     shipyard.version: "{{ .Version.Version }}"
@@ -28,11 +28,11 @@ spec:
   replicas: {{ .Scaling.Min }}
   selector:
     matchLabels:
-      app: {{ .App.Name }}
+      app: {{ .App.GetDNSName }}
   template:
     metadata:
       labels:
-        app: {{ .App.Name }}
+        app: {{ .App.GetDNSName }}
     spec:
       {{- if .ImagePullSecrets }}
       imagePullSecrets:
@@ -41,7 +41,7 @@ spec:
       {{- end }}
       {{- end }}
       containers:
-      - name: {{ .App.Name }}
+      - name: {{ .App.GetDNSName }}
         image: {{ if .CICD.Enabled }}{{ if .CICD.ImageTag }}{{ .CICD.ImageTag }}{{ else }}${IMAGE_TAG}{{ end }}{{ else }}{{ .App.Image }}{{ end }}
         ports:
         - containerPort: {{ .App.Port }}
@@ -53,7 +53,7 @@ spec:
         {{- if .Secrets }}
         envFrom:
         - secretRef:
-            name: {{ .App.Name }}-secrets
+            name: {{ .App.GetDNSName }}-secrets
         {{- end }}
         resources:
           requests:
@@ -97,13 +97,13 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ .App.Name }}-hpa
+  name: {{ .App.GetDNSName }}-hpa
   namespace: {{ .App.GetNamespace }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ .App.Name }}
+    name: {{ .App.GetDNSName }}
   minReplicas: {{ .Scaling.Min }}
   maxReplicas: {{ .Scaling.Max }}
   metrics:

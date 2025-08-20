@@ -12,10 +12,10 @@ const secretsTemplate = `{{- if .Secrets }}
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .App.Name }}-secrets
+  name: {{ .App.GetDNSName }}-secrets
   namespace: {{ .App.GetNamespace }}
   labels:
-    app: {{ .App.Name }}
+    app: {{ .App.GetDNSName }}
     managed-by: shipyard
 type: Opaque
 data:

@@ -10,10 +10,10 @@ import (
 const serviceTemplate = `apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .App.Name }}
+  name: {{ .App.GetDNSName }}
   namespace: {{ .App.GetNamespace }}
   labels:
-    app: {{ .App.Name }}
+    app: {{ .App.GetDNSName }}
     managed-by: shipyard
 spec:
   type: {{ if .Service.Type }}{{ .Service.Type }}{{ else }}ClusterIP{{ end }}
@@ -26,7 +26,7 @@ spec:
     nodePort: {{ .Service.ExternalPort }}
     {{- end }}
   selector:
-    app: {{ .App.Name }}
+    app: {{ .App.GetDNSName }}
 `
 
 // generateService creates the service.yaml file for an application

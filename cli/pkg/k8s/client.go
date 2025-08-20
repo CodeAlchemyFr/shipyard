@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -110,8 +111,10 @@ func (c *Client) ApplyManifests(appName string) error {
 	}
 
 	// Wait for deployment to be ready
-	fmt.Printf("⏳ Waiting for deployment %s to be ready...\n", appName)
-	if err := c.waitForDeployment(appName, 5*time.Minute); err != nil {
+	dnsName := normalizeDNSName(appName)
+	namespace := normalizeDNSName(appName) // Use app name as namespace
+	fmt.Printf("⏳ Waiting for deployment %s to be ready...\n", dnsName)
+	if err := c.waitForDeployment(dnsName, namespace, 5*time.Minute); err != nil {
 		return fmt.Errorf("deployment failed to become ready: %w", err)
 	}
 
@@ -325,13 +328,13 @@ func loadKubeConfig() (*rest.Config, error) {
 }
 
 // waitForDeployment waits for a deployment to be ready with detailed status
-func (c *Client) waitForDeployment(name string, timeout time.Duration) error {
+func (c *Client) waitForDeployment(name, namespace string, timeout time.Duration) error {
 	lastReplicasReady := int32(-1)
 	lastEventsCount := 0
 	
 	return wait.PollImmediate(2*time.Second, timeout, func() (bool, error) {
 		// Get deployment status
-		deployment, err := c.clientset.AppsV1().Deployments(c.namespace).Get(
+		deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(
 			context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			fmt.Printf("❌ Error getting deployment: %v\n", err)
@@ -352,7 +355,7 @@ func (c *Client) waitForDeployment(name string, timeout time.Duration) error {
 		}
 
 		// Show recent events related to this deployment
-		events, err := c.clientset.CoreV1().Events(c.namespace).List(
+		events, err := c.clientset.CoreV1().Events(namespace).List(
 			context.TODO(), metav1.ListOptions{
 				FieldSelector: fmt.Sprintf("involvedObject.name=%s", name),
 			})
@@ -712,6 +715,31 @@ func (c *Client) deleteYAMLDocument(data []byte) error {
 	}
 	
 	return err
+}
+
+// normalizeDNSName converts a string to be DNS-1035 compliant (same as in manifests/config.go)
+func normalizeDNSName(name string) string {
+	// Convert to lowercase and replace underscores with hyphens
+	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	
+	// Remove any characters that aren't alphanumeric or hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]`)
+	result = reg.ReplaceAllString(result, "")
+	
+	// Ensure it starts with a letter
+	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
+		result = "app-" + result
+	}
+	
+	// Ensure it doesn't start or end with hyphen
+	result = strings.Trim(result, "-")
+	
+	// If empty after cleaning, use a default
+	if result == "" {
+		result = "my-app"
+	}
+	
+	return result
 }
 
 // DeleteResourcesByApp deletes all resources for an app by label selector

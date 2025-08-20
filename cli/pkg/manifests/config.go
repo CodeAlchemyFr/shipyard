@@ -3,6 +3,8 @@ package manifests
 import (
 	"fmt"
 	"io/ioutil"
+	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 )
@@ -32,9 +34,43 @@ type AppConfig struct {
 // GetNamespace returns the namespace to use (app name if not specified)
 func (a *AppConfig) GetNamespace() string {
 	if a.Namespace != "" {
-		return a.Namespace
+		return normalizeDNSName(a.Namespace)
 	}
-	return a.Name
+	return normalizeDNSName(a.Name)
+}
+
+// GetDNSName returns a DNS-compliant version of the app name
+func (a *AppConfig) GetDNSName() string {
+	return normalizeDNSName(a.Name)
+}
+
+// normalizeDNSName converts a string to be DNS-1035 compliant
+// - Replace underscores with hyphens
+// - Convert to lowercase
+// - Remove invalid characters
+// - Ensure it starts with a letter and ends with alphanumeric
+func normalizeDNSName(name string) string {
+	// Convert to lowercase and replace underscores with hyphens
+	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	
+	// Remove any characters that aren't alphanumeric or hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]`)
+	result = reg.ReplaceAllString(result, "")
+	
+	// Ensure it starts with a letter
+	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
+		result = "app-" + result
+	}
+	
+	// Ensure it doesn't start or end with hyphen
+	result = strings.Trim(result, "-")
+	
+	// If empty after cleaning, use a default
+	if result == "" {
+		result = "my-app"
+	}
+	
+	return result
 }
 
 type BuildConfig struct {

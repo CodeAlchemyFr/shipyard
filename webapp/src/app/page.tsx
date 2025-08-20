@@ -83,6 +83,8 @@ export default function Home() {
   const [selectedRegistry, setSelectedRegistry] = useState('')
   const [imageName, setImageName] = useState('')
   const [generatedYaml, setGeneratedYaml] = useState('')
+  const [nameValidation, setNameValidation] = useState<{isValid: boolean, suggestion?: string, message?: string}>({isValid: true})
+  const [namespaceValidation, setNamespaceValidation] = useState<{isValid: boolean, suggestion?: string, message?: string}>({isValid: true})
 
   const registries = {
     'ghcr.io': 'GitHub Container Registry',
@@ -177,6 +179,41 @@ health:
     setGeneratedYaml(yaml)
   }, [config])
 
+  // DNS validation function
+  const validateDNSName = (name: string) => {
+    if (!name) return { isValid: true }
+    
+    // DNS-1035 rules: lowercase alphanumeric + hyphens, start with letter, end with alphanumeric
+    const isValid = /^[a-z]([a-z0-9-]*[a-z0-9])?$/.test(name)
+    
+    if (isValid) {
+      return { isValid: true }
+    }
+    
+    // Generate suggestion
+    let suggestion = name.toLowerCase()
+      .replace(/_/g, '-')  // Replace underscores with hyphens
+      .replace(/[^a-z0-9-]/g, '')  // Remove invalid characters
+    
+    // Ensure it starts with a letter
+    if (suggestion && suggestion[0] >= '0' && suggestion[0] <= '9') {
+      suggestion = 'app-' + suggestion
+    }
+    
+    // Remove leading/trailing hyphens
+    suggestion = suggestion.replace(/^-+|-+$/g, '')
+    
+    if (!suggestion) {
+      suggestion = 'my-app'
+    }
+    
+    return {
+      isValid: false,
+      suggestion,
+      message: `Nom invalide. Règles DNS: lettres minuscules, chiffres et tirets (-), commencer par une lettre.`
+    }
+  }
+
   const updateImageFromRegistry = () => {
     if (selectedRegistry && imageName) {
       let fullImage = ''
@@ -270,8 +307,32 @@ health:
                   id="name"
                   placeholder="mon-app"
                   value={config.name}
-                  onChange={(e) => setConfig({...config, name: e.target.value})}
+                  onChange={(e) => {
+                    const newName = e.target.value
+                    setConfig({...config, name: newName})
+                    setNameValidation(validateDNSName(newName))
+                  }}
+                  className={!nameValidation.isValid ? 'border-red-500' : ''}
                 />
+                {!nameValidation.isValid && (
+                  <div className="text-sm space-y-1">
+                    <p className="text-red-600">{nameValidation.message}</p>
+                    <p className="text-blue-600">
+                      💡 Suggestion: <code className="bg-blue-50 px-1 rounded">{nameValidation.suggestion}</code>
+                      <button 
+                        onClick={() => {
+                          if (nameValidation.suggestion) {
+                            setConfig({...config, name: nameValidation.suggestion})
+                            setNameValidation({isValid: true})
+                          }
+                        }}
+                        className="ml-2 text-blue-600 underline hover:text-blue-800"
+                      >
+                        Utiliser
+                      </button>
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Image Docker avec registry */}
@@ -334,8 +395,36 @@ health:
                   id="namespace"
                   placeholder={`Par défaut: ${config.name || 'nom-de-app'}`}
                   value={config.namespace || ''}
-                  onChange={(e) => setConfig({...config, namespace: e.target.value || undefined})}
+                  onChange={(e) => {
+                    const newNamespace = e.target.value
+                    setConfig({...config, namespace: newNamespace || undefined})
+                    if (newNamespace) {
+                      setNamespaceValidation(validateDNSName(newNamespace))
+                    } else {
+                      setNamespaceValidation({isValid: true})
+                    }
+                  }}
+                  className={!namespaceValidation.isValid ? 'border-red-500' : ''}
                 />
+                {!namespaceValidation.isValid && (
+                  <div className="text-sm space-y-1">
+                    <p className="text-red-600">{namespaceValidation.message}</p>
+                    <p className="text-blue-600">
+                      💡 Suggestion: <code className="bg-blue-50 px-1 rounded">{namespaceValidation.suggestion}</code>
+                      <button 
+                        onClick={() => {
+                          if (namespaceValidation.suggestion) {
+                            setConfig({...config, namespace: namespaceValidation.suggestion})
+                            setNamespaceValidation({isValid: true})
+                          }
+                        }}
+                        className="ml-2 text-blue-600 underline hover:text-blue-800"
+                      >
+                        Utiliser
+                      </button>
+                    </p>
+                  </div>
+                )}
                 <p className="text-xs text-gray-500 mt-1">Si non spécifié, le nom de l'application sera utilisé comme namespace</p>
               </div>
             </CardContent>
@@ -610,20 +699,39 @@ health:
             </CardContent>
           </Card>
 
-          {/* Namespace Info */}
+          {/* DNS Validation Info */}
           <Card>
             <CardHeader>
-              <CardTitle>📍 Namespaces</CardTitle>
+              <CardTitle>⚙️ Règles de nommage DNS</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2 text-sm text-gray-600">
-                <p><strong>🎯 Comportement automatique:</strong></p>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Si aucun namespace n'est spécifié, le <strong>nom de l'app</strong> sera utilisé comme namespace</li>
-                  <li>Exemple: app "my-api" → namespace "my-api"</li>
-                  <li>Chaque application obtient son propre namespace pour une meilleure isolation</li>
-                  <li>Le namespace est créé automatiquement s'il n'existe pas</li>
-                </ul>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="font-medium text-gray-800">📋 Règles DNS-1035 (Kubernetes):</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2 text-gray-600">
+                    <li>Uniquement lettres minuscules, chiffres et tirets (-)</li>
+                    <li>Doit commencer par une lettre</li>
+                    <li>Doit finir par une lettre ou un chiffre</li>
+                    <li>Pas de underscores (_), espaces ou caractères spéciaux</li>
+                  </ul>
+                </div>
+                
+                <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+                  <p className="font-medium text-blue-800">🎩 Noms finaux générés:</p>
+                  <div className="space-y-1 text-blue-700">
+                    <p>• <strong>Service:</strong> <code>{nameValidation.isValid ? config.name : (nameValidation.suggestion || config.name)}</code></p>
+                    <p>• <strong>Namespace:</strong> <code>{config.namespace ? (namespaceValidation.isValid ? config.namespace : (namespaceValidation.suggestion || config.namespace)) : (nameValidation.isValid ? config.name : (nameValidation.suggestion || config.name))}</code></p>
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="font-medium text-gray-800">🎯 Comportement des namespaces:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2 text-gray-600">
+                    <li>Si aucun namespace spécifié → utilise le nom de l'app</li>
+                    <li>Chaque app dans son propre namespace pour l'isolation</li>
+                    <li>Namespace créé automatiquement si inexistant</li>
+                  </ul>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -660,8 +768,15 @@ health:
             </CardContent>
           </Card>
 
-          <div className="text-center text-sm text-gray-500">
-            ⚡ Le YAML se génère automatiquement en temps réel
+          <div className="text-center space-y-2">
+            <div className="text-sm text-gray-500">
+              ⚡ Le YAML se génère automatiquement en temps réel
+            </div>
+            {(!nameValidation.isValid || !namespaceValidation.isValid) && (
+              <div className="text-sm text-orange-600 bg-orange-50 p-2 rounded border">
+                ⚠️ Certains noms ne respectent pas les règles DNS. Utilisez les suggestions ci-dessus.
+              </div>
+            )}
           </div>
         </div>
 

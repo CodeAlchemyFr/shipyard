@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"os"
+	"regexp"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/shipyard/cli/pkg/manifests"
@@ -43,6 +47,11 @@ func runDeploy() error {
 	config, err := manifests.LoadConfig("paas.yaml")
 	if err != nil {
 		return fmt.Errorf("failed to load paas.yaml: %w", err)
+	}
+
+	// 1.5. Validate DNS names and ask for confirmation if needed
+	if err := validateAndConfirmDNSNames(config); err != nil {
+		return fmt.Errorf("DNS validation failed: %w", err)
 	}
 
 	// 2. Create version manager and generate new version
@@ -123,6 +132,84 @@ func runDeploy() error {
 	fmt.Printf("💡 To check status, run: shipyard status\n")
 	
 	return nil
+}
+
+// validateAndConfirmDNSNames checks if names need DNS normalization and asks for user confirmation
+func validateAndConfirmDNSNames(config *manifests.Config) error {
+	// Check if app name is DNS compliant
+	originalName := config.App.Name
+	normalizedName := normalizeDNSName(originalName)
+	
+	changes := []string{}
+	if originalName != normalizedName {
+		changes = append(changes, fmt.Sprintf("App name: '%s' → '%s'", originalName, normalizedName))
+	}
+	
+	// Check namespace if specified
+	if config.App.Namespace != "" {
+		originalNamespace := config.App.Namespace
+		normalizedNamespace := normalizeDNSName(originalNamespace)
+		if originalNamespace != normalizedNamespace {
+			changes = append(changes, fmt.Sprintf("Namespace: '%s' → '%s'", originalNamespace, normalizedNamespace))
+		}
+	}
+	
+	// If no changes needed, continue
+	if len(changes) == 0 {
+		return nil
+	}
+	
+	// Show proposed changes and ask for confirmation
+	fmt.Println("⚠️  Les noms suivants ne sont pas compatibles DNS-1035 et seront modifiés:")
+	for _, change := range changes {
+		fmt.Printf("   %s\n", change)
+	}
+	fmt.Println("\n📋 Règles DNS-1035:")
+	fmt.Println("   - Uniquement lettres minuscules, chiffres et tirets (-)")
+	fmt.Println("   - Doit commencer par une lettre")
+	fmt.Println("   - Doit finir par une lettre ou un chiffre")
+	
+	fmt.Print("\n❓ Continuer avec ces modifications ? (y/N): ")
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+	
+	response = strings.ToLower(strings.TrimSpace(response))
+	if response != "y" && response != "yes" && response != "oui" {
+		fmt.Println("❌ Déploiement annulé")
+		fmt.Println("💡 Modifiez votre paas.yaml pour utiliser des noms compatibles DNS")
+		return fmt.Errorf("user cancelled deployment due to DNS name changes")
+	}
+	
+	fmt.Println("✅ Modifications acceptées, déploiement en cours...")
+	return nil
+}
+
+// normalizeDNSName converts a string to be DNS-1035 compliant
+func normalizeDNSName(name string) string {
+	// Convert to lowercase and replace underscores with hyphens
+	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	
+	// Remove any characters that aren't alphanumeric or hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]`)
+	result = reg.ReplaceAllString(result, "")
+	
+	// Ensure it starts with a letter
+	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
+		result = "app-" + result
+	}
+	
+	// Ensure it doesn't start or end with hyphen
+	result = strings.Trim(result, "-")
+	
+	// If empty after cleaning, use a default
+	if result == "" {
+		result = "my-app"
+	}
+	
+	return result
 }
 
 func init() {
