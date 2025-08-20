@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -203,8 +204,19 @@ func deleteKubernetesResources(appName string) error {
 		return nil
 	}
 
-	// Use kubectl delete command for simplicity
-	return manifests.DeleteManifestsFromDirectory(client, manifestDir)
+	// Delete app resources
+	if err := manifests.DeleteManifestsFromDirectory(client, manifestDir); err != nil {
+		return fmt.Errorf("failed to delete app resources: %w", err)
+	}
+
+	// Also delete the namespace if it exists
+	namespaceName := normalizeDNSName(appName)
+	fmt.Printf("🗑️  Deleting namespace: %s\n", namespaceName)
+	if err := deleteNamespace(namespaceName); err != nil {
+		fmt.Printf("⚠️  Warning: Failed to delete namespace %s: %v\n", namespaceName, err)
+	}
+
+	return nil
 }
 
 func deleteManifestFiles(appName string) error {
@@ -397,4 +409,35 @@ func cleanupEmptyDirectories(startPath string) {
 		fmt.Printf("🧹 Removing empty directory: %s\n", startPath)
 		os.Remove(startPath)
 	}
+}
+
+// normalizeDNSName converts a string to be DNS-1035 compliant
+func normalizeDNSName(name string) string {
+	// Convert to lowercase and replace underscores with hyphens
+	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	
+	// Remove any characters that aren't alphanumeric or hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]`)
+	result = reg.ReplaceAllString(result, "")
+	
+	// Ensure it starts with a letter
+	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
+		result = "app-" + result
+	}
+	
+	// Ensure it doesn't start or end with hyphen
+	result = strings.Trim(result, "-")
+	
+	// If empty after cleaning, use a default
+	if result == "" {
+		result = "my-app"
+	}
+	
+	return result
+}
+
+// deleteNamespace deletes a Kubernetes namespace
+func deleteNamespace(namespaceName string) error {
+	cmd := fmt.Sprintf("kubectl delete namespace %s --ignore-not-found=true", namespaceName)
+	return executeKubectlCommand(cmd)
 }
