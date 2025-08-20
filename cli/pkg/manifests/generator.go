@@ -115,8 +115,8 @@ func (g *Generator) handleCICDDeployment() error {
 			return err
 		}
 		
-		// Then: Replace image with ${IMAGE_TAG} placeholder for CI/CD
-		return g.updateDeploymentForCICD()
+		// Note: Image will be replaced with ${IMAGE_TAG} after successful deployment
+		return nil
 	} else {
 		fmt.Printf("🔄 CI/CD enabled - manifests already exist with ${IMAGE_TAG} placeholder\n")
 		return nil
@@ -251,5 +251,10 @@ metadata:
 	
 	fmt.Printf("🏗️  Generated namespace: %s (for app: %s)\n", namespacePath, g.config.App.Name)
 	return nil
+}
+
+// UpdateDeploymentForCICD replaces the real image with ${IMAGE_TAG} placeholder (public method)
+func (g *Generator) UpdateDeploymentForCICD() error {
+	return g.updateDeploymentForCICD()
 }
 

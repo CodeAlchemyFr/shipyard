@@ -122,6 +122,16 @@ func runDeploy() error {
 		fmt.Printf("⚠️  Warning: failed to update version status: %v\n", err)
 	}
 
+	// Update deployment for CI/CD if enabled (after successful deployment)
+	if config.CICD.Enabled {
+		fmt.Printf("🔄 Updating deployment for CI/CD mode...\n")
+		if err := generator.UpdateDeploymentForCICD(); err != nil {
+			fmt.Printf("⚠️  Warning: failed to update deployment for CI/CD: %v\n", err)
+		} else {
+			fmt.Printf("✅ Deployment updated for CI/CD - image replaced with ${IMAGE_TAG}\n")
+		}
+	}
+
 	fmt.Printf("✅ Deployment successful!\n")
 	fmt.Printf("   App: %s\n", config.App.Name)
 	fmt.Printf("   Version: %s\n", deployVersion.Version)
