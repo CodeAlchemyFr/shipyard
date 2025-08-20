@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/shipyard/cli/pkg/config"
 	"github.com/shipyard/cli/pkg/k8s"
@@ -92,6 +93,43 @@ func NewGeneratorWithVersionAndMode(cfg *Config, version *DeploymentVersion, int
 
 // GenerateAppManifests creates all manifests for an application
 func (g *Generator) GenerateAppManifests() error {
+	// Handle CI/CD mode - check if this is initial deployment or update
+	if g.config.CICD.Enabled {
+		return g.handleCICDDeployment()
+	}
+	
+	return g.generateStandardManifests()
+}
+
+// handleCICDDeployment manages CI/CD enabled deployments
+func (g *Generator) handleCICDDeployment() error {
+	appDir := filepath.Join(g.outputDir, "apps", g.config.App.Name)
+	deploymentFile := filepath.Join(appDir, "deployment.yaml")
+	
+	// Check if this is the first deployment
+	if _, err := os.Stat(deploymentFile); os.IsNotExist(err) {
+		fmt.Printf("🚀 First deployment - creating manifests with real image, then switching to ${IMAGE_TAG}\n")
+		
+		// First: Create manifests with real image
+		if err := g.generateStandardManifests(); err != nil {
+			return err
+		}
+		
+		// Then: Replace image with ${IMAGE_TAG} placeholder for CI/CD
+		return g.updateDeploymentForCICD()
+	} else {
+		fmt.Printf("🔄 CI/CD enabled - manifests already exist with ${IMAGE_TAG} placeholder\n")
+		return nil
+	}
+}
+
+// generateStandardManifests generates manifests for normal Shipyard deployment
+func (g *Generator) generateStandardManifests() error {
+	// Generate namespace if specified
+	if err := g.generateNamespace(); err != nil {
+		return err
+	}
+	
 	appDir := filepath.Join(g.outputDir, "apps", g.config.App.Name)
 	
 	// Create app directory
@@ -148,5 +186,70 @@ func DeleteManifestsFromDirectory(client *k8s.Client, directory string) error {
 	
 	// Use the client's delete method
 	return client.DeleteManifests(appName)
+}
+
+// updateDeploymentForCICD replaces the real image with ${IMAGE_TAG} placeholder
+func (g *Generator) updateDeploymentForCICD() error {
+	appDir := filepath.Join(g.outputDir, "apps", g.config.App.Name)
+	deploymentFile := filepath.Join(appDir, "deployment.yaml")
+	
+	// Read current deployment file
+	content, err := os.ReadFile(deploymentFile)
+	if err != nil {
+		return fmt.Errorf("failed to read deployment file: %w", err)
+	}
+	
+	// Replace the image line with ${IMAGE_TAG}
+	updatedContent := strings.ReplaceAll(string(content), 
+		fmt.Sprintf("image: %s", g.config.App.Image),
+		"image: ${IMAGE_TAG}")
+	
+	// Write updated content back
+	err = os.WriteFile(deploymentFile, []byte(updatedContent), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write updated deployment file: %w", err)
+	}
+	
+	fmt.Printf("🔄 Updated deployment.yaml: %s → ${IMAGE_TAG}\n", g.config.App.Image)
+	return nil
+}
+
+// generateNamespace creates a namespace manifest if needed
+func (g *Generator) generateNamespace() error {
+	targetNamespace := g.config.App.GetNamespace()
+	
+	// Skip if using default namespace
+	if targetNamespace == "default" {
+		return nil
+	}
+	
+	sharedDir := filepath.Join(g.outputDir, "shared")
+	if err := os.MkdirAll(sharedDir, 0755); err != nil {
+		return fmt.Errorf("failed to create shared directory %s: %w", sharedDir, err)
+	}
+	
+	namespacePath := filepath.Join(sharedDir, fmt.Sprintf("namespace-%s.yaml", targetNamespace))
+	
+	// Check if namespace file already exists
+	if _, err := os.Stat(namespacePath); err == nil {
+		return nil // Already exists
+	}
+	
+	namespaceContent := fmt.Sprintf(`apiVersion: v1
+kind: Namespace
+metadata:
+  name: %s
+  labels:
+    managed-by: shipyard
+    app: %s
+`, targetNamespace, g.config.App.Name)
+	
+	err := os.WriteFile(namespacePath, []byte(namespaceContent), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create namespace file: %w", err)
+	}
+	
+	fmt.Printf("🏗️  Generated namespace: %s (for app: %s)\n", namespacePath, g.config.App.Name)
+	return nil
 }
 

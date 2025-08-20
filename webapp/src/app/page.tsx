@@ -13,6 +13,7 @@ interface PaasConfig {
   name: string
   image: string
   port: number
+  namespace?: string
   service: {
     exposePublic: boolean
     type: 'ClusterIP' | 'NodePort'
@@ -92,7 +93,8 @@ export default function Home() {
 app:
   name: ${config.name}
   image: ${config.image}
-  port: ${config.port}
+  port: ${config.port}${config.namespace ? `
+  namespace: ${config.namespace}` : ''}
 
 service:
   type: ${config.service.type}`
@@ -305,6 +307,17 @@ health:
                   onChange={(e) => setConfig({...config, port: parseInt(e.target.value) || 3000})}
                 />
                 <p className="text-xs text-gray-500 mt-1">Port exposé par votre image Docker</p>
+              </div>
+
+              <div>
+                <Label htmlFor="namespace">Namespace (optionnel)</Label>
+                <Input
+                  id="namespace"
+                  placeholder={`Par défaut: ${config.name || 'nom-de-app'}`}
+                  value={config.namespace || ''}
+                  onChange={(e) => setConfig({...config, namespace: e.target.value || undefined})}
+                />
+                <p className="text-xs text-gray-500 mt-1">Si non spécifié, le nom de l'application sera utilisé comme namespace</p>
               </div>
             </CardContent>
           </Card>
@@ -536,6 +549,24 @@ health:
                   </Button>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          {/* Namespace Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle>📍 Namespaces</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm text-gray-600">
+                <p><strong>🎯 Comportement automatique:</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Si aucun namespace n'est spécifié, le <strong>nom de l'app</strong> sera utilisé comme namespace</li>
+                  <li>Exemple: app "my-api" → namespace "my-api"</li>
+                  <li>Chaque application obtient son propre namespace pour une meilleure isolation</li>
+                  <li>Le namespace est créé automatiquement s'il n'existe pas</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
 

@@ -11,6 +11,7 @@ const deploymentTemplate = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .App.Name }}
+  namespace: {{ .App.GetNamespace }}
   labels:
     app: {{ .App.Name }}
     managed-by: shipyard
@@ -41,7 +42,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .App.Name }}
-        image: {{ .App.Image }}
+        image: {{ if .CICD.Enabled }}{{ .CICD.ImageTag | default "${IMAGE_TAG}" }}{{ else }}{{ .App.Image }}{{ end }}
         ports:
         - containerPort: {{ .App.Port }}
         env:
@@ -97,6 +98,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: {{ .App.Name }}-hpa
+  namespace: {{ .App.GetNamespace }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

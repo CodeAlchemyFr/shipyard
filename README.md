@@ -43,9 +43,10 @@ mkdir my-app && cd my-app
 2. **Create a paas.yaml:**
 ```yaml
 app:
-  name: my-app
+  name: my-app            # Also used as namespace
   image: nginx:latest
   port: 80
+  # namespace: custom-ns  # Optional: overrides app name
 
 service:
   type: ClusterIP
@@ -165,13 +166,18 @@ Complete configuration example:
 
 ```yaml
 app:
-  name: my-app
+  name: my-app          # Also used as namespace
   image: ghcr.io/user/my-app:latest
   port: 3000
+  # namespace: production  # Optional: overrides app name
 
 service:
   type: NodePort        # ClusterIP or NodePort
   externalPort: 30080   # Required for NodePort
+
+cicd:
+  enabled: true         # Enable CI/CD mode
+  image_tag: "${IMAGE_TAG}"  # Placeholder for CI/CD
 
 resources:
   cpu: 500m
@@ -256,6 +262,62 @@ kubectl get svc
 
 **Port issues:**
 Make sure your `paas.yaml` port matches your application's exposed port, not the service port.
+
+## 🔄 CI/CD Integration
+
+Shipyard supports seamless CI/CD integration with automatic image updates:
+
+### Configuration
+
+Add the `cicd` section to your `paas.yaml`:
+
+```yaml
+app:
+  name: my-api                       # Also used as namespace
+  image: ghcr.io/user/my-api:v1.0.0  # Initial image for first deployment
+  port: 3000
+  # namespace: production            # Optional: overrides app name
+
+cicd:
+  enabled: true                      # Enable CI/CD mode
+  image_tag: "${IMAGE_TAG}"         # Placeholder (optional, defaults to ${IMAGE_TAG})
+
+# ... rest of your config
+```
+
+### How it works
+
+1. **First deployment**: Shipyard deploys with your specified image (`ghcr.io/user/my-api:v1.0.0`)
+2. **Automatic conversion**: After deployment, Shipyard replaces the image with `${IMAGE_TAG}` placeholder
+3. **CI/CD updates**: Your CI/CD pipeline can update deployments without Shipyard
+
+### CI/CD Pipeline Example
+
+```yaml
+# GitHub Actions example
+- name: Deploy to Kubernetes
+  run: |
+    IMAGE_TAG="${{ needs.build-and-push.outputs.image-tag }}"
+    kubectl set image deployment/my-api my-api=${IMAGE_TAG} -n my-api
+    kubectl rollout status deployment/my-api -n my-api --timeout=300s
+```
+
+### Namespaces
+
+Shipyard automatically manages namespaces:
+
+- **Default behavior**: Uses app name as namespace (e.g., `name: my-api` → namespace `my-api`)
+- **Override option**: Set `namespace: custom-name` to use a different namespace  
+- **Automatic creation**: Namespace is created automatically if it doesn't exist
+- **Isolation**: Each app gets its own namespace for better isolation
+
+### Benefits
+
+- ✅ **Separation of concerns**: Shipyard handles infrastructure, CI/CD handles updates
+- ✅ **No conflicts**: CI/CD doesn't interfere with Shipyard manifests
+- ✅ **Faster deployments**: Simple image updates via `kubectl set image`
+- ✅ **GitOps friendly**: Manifests stay clean with placeholders
+- ✅ **Namespace isolation**: Each app in its own namespace by default
 
 ## 🤝 Contributing
 

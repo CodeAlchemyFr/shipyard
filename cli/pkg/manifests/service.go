@@ -11,6 +11,7 @@ const serviceTemplate = `apiVersion: v1
 kind: Service
 metadata:
   name: {{ .App.Name }}
+  namespace: {{ .App.GetNamespace }}
   labels:
     app: {{ .App.Name }}
     managed-by: shipyard

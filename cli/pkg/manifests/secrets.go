@@ -13,6 +13,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: {{ .App.Name }}-secrets
+  namespace: {{ .App.GetNamespace }}
   labels:
     app: {{ .App.Name }}
     managed-by: shipyard

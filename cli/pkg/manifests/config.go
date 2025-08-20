@@ -15,6 +15,7 @@ type Config struct {
 	Scaling   ScalingConfig   `yaml:"scaling,omitempty"`
 	Health    HealthConfig    `yaml:"health,omitempty"`
 	Service   ServiceConfig   `yaml:"service,omitempty"`
+	CICD      CICDConfig      `yaml:"cicd,omitempty"`
 	Env       map[string]string `yaml:"env,omitempty"`
 	Secrets   map[string]string `yaml:"secrets,omitempty"`
 	Addons    []string        `yaml:"addons,omitempty"`
@@ -22,9 +23,18 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name  string `yaml:"name"`
-	Image string `yaml:"image"`
-	Port  int    `yaml:"port,omitempty"`
+	Name      string `yaml:"name"`
+	Image     string `yaml:"image"`
+	Port      int    `yaml:"port,omitempty"`
+	Namespace string `yaml:"namespace,omitempty"`
+}
+
+// GetNamespace returns the namespace to use (app name if not specified)
+func (a *AppConfig) GetNamespace() string {
+	if a.Namespace != "" {
+		return a.Namespace
+	}
+	return a.Name
 }
 
 type BuildConfig struct {
@@ -58,6 +68,12 @@ type ProbeConfig struct {
 type ServiceConfig struct {
 	Type         string `yaml:"type,omitempty"`
 	ExternalPort int    `yaml:"externalPort,omitempty"`
+}
+
+type CICDConfig struct {
+	Enabled     bool   `yaml:"enabled,omitempty"`
+	ImageTag    string `yaml:"image_tag,omitempty"`
+	Namespace   string `yaml:"namespace,omitempty"`
 }
 
 // LoadConfig loads and parses the paas.yaml configuration file
