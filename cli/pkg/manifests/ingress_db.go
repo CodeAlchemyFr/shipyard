@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/shipyard/cli/pkg/domains"
+	"github.com/shipyard/cli/pkg/k8s"
 )
 
 const ingressTemplateDomain = `apiVersion: networking.k8s.io/v1
@@ -57,11 +58,24 @@ metadata:
     app: {{ .AppName }}
     proxy-for: {{ .AppName }}
 spec:
-  type: ExternalName
-  externalName: {{ .AppName }}.{{ .AppNamespace }}.svc.cluster.local
+  type: ClusterIP
   ports:
   - port: {{ $.AppPort }}
     targetPort: {{ $.AppPort }}
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: {{ .AppName }}-proxy
+  labels:
+    managed-by: shipyard
+    app: {{ .AppName }}
+    proxy-for: {{ .AppName }}
+subsets:
+- addresses:
+  - ip: {{ .ServiceIP }}
+  ports:
+  - port: {{ $.AppPort }}
 {{- end }}
 `
 
@@ -127,19 +141,34 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 		appPort = g.config.App.Port
 	}
 
-	// Enhance domain data with normalized names
+	// Create k8s client to resolve service IPs
+	client, err := k8s.NewClient()
+	if err != nil {
+		return fmt.Errorf("failed to create k8s client: %w", err)
+	}
+
+	// Enhance domain data with normalized names and service IPs
 	enhancedDomains := make([]struct {
 		domains.Domain
 		AppNamespace string
+		ServiceIP    string
 	}, len(domainList))
 	
 	for i, domain := range domainList {
+		// Get service IP
+		serviceIP, err := client.GetServiceClusterIP(domain.AppName, domain.AppName)
+		if err != nil {
+			return fmt.Errorf("failed to get service IP for %s: %w", domain.AppName, err)
+		}
+
 		enhancedDomains[i] = struct {
 			domains.Domain
 			AppNamespace string
+			ServiceIP    string
 		}{
 			Domain:       domain,
-			AppNamespace: normalizeDNSName(domain.AppName),
+			AppNamespace: domain.AppName, // Use original name since we removed normalization
+			ServiceIP:    serviceIP,
 		}
 	}
 
@@ -149,6 +178,7 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 		Domains    []struct {
 			domains.Domain
 			AppNamespace string
+			ServiceIP    string
 		}
 		SSLEnabled bool
 		AppPort    int

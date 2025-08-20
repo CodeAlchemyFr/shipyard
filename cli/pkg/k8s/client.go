@@ -767,3 +767,17 @@ func (c *Client) deleteResourcesByLabel(gvr schema.GroupVersionResource, labelSe
 		metav1.ListOptions{LabelSelector: labelSelector},
 	)
 }
+
+// GetServiceClusterIP returns the ClusterIP of a service
+func (c *Client) GetServiceClusterIP(serviceName, namespace string) (string, error) {
+	service, err := c.clientset.CoreV1().Services(namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get service %s in namespace %s: %w", serviceName, namespace, err)
+	}
+	
+	if service.Spec.ClusterIP == "" || service.Spec.ClusterIP == "None" {
+		return "", fmt.Errorf("service %s has no ClusterIP", serviceName)
+	}
+	
+	return service.Spec.ClusterIP, nil
+}
