@@ -116,12 +116,6 @@ func runDeploy() error {
 		return fmt.Errorf("failed to apply manifests: %w", err)
 	}
 
-	// Copy registry secrets from default to app namespace (after namespace is created)
-	fmt.Printf("📋 Copying registry secrets to namespace %s...\n", config.App.Name)
-	if err := client.CopyRegistrySecretsFromDefault(config.App.Name); err != nil {
-		fmt.Printf("⚠️  Warning: failed to copy registry secrets: %v\n", err)
-	}
-
 	// Mark deployment as successful
 	if err := versionManager.UpdateVersionStatus(deployVersion.Version, "success"); err != nil {
 		fmt.Printf("⚠️  Warning: failed to update version status: %v\n", err)

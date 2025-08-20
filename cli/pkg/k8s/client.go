@@ -109,6 +109,12 @@ func (c *Client) ApplyManifests(appName string) error {
 		return fmt.Errorf("failed to apply app manifests: %w", err)
 	}
 
+	// Copy registry secrets from default to app namespace (after namespace is created)
+	fmt.Printf("📋 Copying registry secrets to namespace %s...\n", appName)
+	if err := c.CopyRegistrySecretsFromDefault(appName); err != nil {
+		fmt.Printf("⚠️  Warning: failed to copy registry secrets: %v\n", err)
+	}
+
 	// Wait for deployment to be ready
 	dnsName := appName // TODO: Add DNS validation warning if needed
 	namespace := appName // Use app name as namespace - TODO: Add DNS validation
