@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -111,8 +110,8 @@ func (c *Client) ApplyManifests(appName string) error {
 	}
 
 	// Wait for deployment to be ready
-	dnsName := normalizeDNSName(appName)
-	namespace := normalizeDNSName(appName) // Use app name as namespace
+	dnsName := appName // TODO: Add DNS validation warning if needed
+	namespace := appName // Use app name as namespace - TODO: Add DNS validation
 	fmt.Printf("⏳ Waiting for deployment %s to be ready...\n", dnsName)
 	if err := c.waitForDeployment(dnsName, namespace, 5*time.Minute); err != nil {
 		return fmt.Errorf("deployment failed to become ready: %w", err)
@@ -733,30 +732,6 @@ func (c *Client) deleteYAMLDocument(data []byte) error {
 	return err
 }
 
-// normalizeDNSName converts a string to be DNS-1035 compliant (same as in manifests/config.go)
-func normalizeDNSName(name string) string {
-	// Convert to lowercase and replace underscores with hyphens
-	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
-	
-	// Remove any characters that aren't alphanumeric or hyphens
-	reg := regexp.MustCompile(`[^a-z0-9-]`)
-	result = reg.ReplaceAllString(result, "")
-	
-	// Ensure it starts with a letter
-	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
-		result = "app-" + result
-	}
-	
-	// Ensure it doesn't start or end with hyphen
-	result = strings.Trim(result, "-")
-	
-	// If empty after cleaning, use a default
-	if result == "" {
-		result = "my-app"
-	}
-	
-	return result
-}
 
 // DeleteResourcesByApp deletes all resources for an app by label selector
 func (c *Client) DeleteResourcesByApp(appName string) error {

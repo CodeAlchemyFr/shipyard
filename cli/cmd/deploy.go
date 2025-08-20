@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -148,20 +147,17 @@ func runDeploy() error {
 func validateAndConfirmDNSNames(config *manifests.Config) error {
 	// Check if app name is DNS compliant
 	originalName := config.App.Name
-	normalizedName := normalizeDNSName(originalName)
+	// TODO: Add DNS validation instead of normalization
+	_ = originalName // prevent unused variable warning
 	
 	changes := []string{}
-	if originalName != normalizedName {
-		changes = append(changes, fmt.Sprintf("App name: '%s' → '%s'", originalName, normalizedName))
-	}
+	// DNS validation would go here
 	
 	// Check namespace if specified
 	if config.App.Namespace != "" {
 		originalNamespace := config.App.Namespace
-		normalizedNamespace := normalizeDNSName(originalNamespace)
-		if originalNamespace != normalizedNamespace {
-			changes = append(changes, fmt.Sprintf("Namespace: '%s' → '%s'", originalNamespace, normalizedNamespace))
-		}
+		// TODO: Add DNS validation for namespace
+		_ = originalNamespace // prevent unused variable warning
 	}
 	
 	// If no changes needed, continue
@@ -197,30 +193,6 @@ func validateAndConfirmDNSNames(config *manifests.Config) error {
 	return nil
 }
 
-// normalizeDNSName converts a string to be DNS-1035 compliant
-func normalizeDNSName(name string) string {
-	// Convert to lowercase and replace underscores with hyphens
-	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
-	
-	// Remove any characters that aren't alphanumeric or hyphens
-	reg := regexp.MustCompile(`[^a-z0-9-]`)
-	result = reg.ReplaceAllString(result, "")
-	
-	// Ensure it starts with a letter
-	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
-		result = "app-" + result
-	}
-	
-	// Ensure it doesn't start or end with hyphen
-	result = strings.Trim(result, "-")
-	
-	// If empty after cleaning, use a default
-	if result == "" {
-		result = "my-app"
-	}
-	
-	return result
-}
 
 func init() {
 	deployCmd.Flags().BoolVar(&autoRegistry, "auto-registry", false, "Automatically select the best matching registry instead of prompting")

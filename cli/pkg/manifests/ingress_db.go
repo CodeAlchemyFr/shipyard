@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"text/template"
 
 	"github.com/shipyard/cli/pkg/domains"
@@ -179,30 +177,6 @@ func (g *Generator) generateIngressFileFromDomains(ingressFile, baseDomain strin
 	return nil
 }
 
-// normalizeDNSName converts a string to be DNS-1035 compliant
-func normalizeDNSName(name string) string {
-	// Convert to lowercase and replace underscores with hyphens
-	result := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
-	
-	// Remove any characters that aren't alphanumeric or hyphens
-	reg := regexp.MustCompile(`[^a-z0-9-]`)
-	result = reg.ReplaceAllString(result, "")
-	
-	// Ensure it starts with a letter
-	if len(result) > 0 && result[0] >= '0' && result[0] <= '9' {
-		result = "app-" + result
-	}
-	
-	// Ensure it doesn't start or end with hyphen
-	result = strings.Trim(result, "-")
-	
-	// If empty after cleaning, use a default
-	if result == "" {
-		result = "my-app"
-	}
-	
-	return result
-}
 
 // UpdateIngressFromDatabase updates ingress files based on current database state
 func (g *Generator) UpdateIngressFromDatabase(appName string) error {
