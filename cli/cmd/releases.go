@@ -101,9 +101,14 @@ func runReleases() error {
 		strings.Repeat("─", 10), strings.Repeat("─", 20), strings.Repeat("─", 15))
 
 	fmt.Printf("\n💡 Usage:\n")
-	fmt.Printf("   shipyard rollback %s    # Rollback to specific version\n", versions[1].Version)
-	fmt.Printf("   shipyard rollback %s        # Rollback to specific image tag\n", versions[1].ImageTag)
-	fmt.Printf("   shipyard rollback                 # Rollback to latest successful\n")
+	if len(versions) > 1 {
+		fmt.Printf("   shipyard rollback %s    # Rollback to specific version\n", versions[1].Version)
+		fmt.Printf("   shipyard rollback %s        # Rollback to specific image tag\n", versions[1].ImageTag)
+	} else {
+		fmt.Printf("   shipyard rollback v1234567890      # Rollback to specific version\n")
+		fmt.Printf("   shipyard rollback v1.2.3           # Rollback to specific image tag\n")
+	}
+	fmt.Printf("   shipyard rollback                   # Rollback to latest successful\n")
 
 	return nil
 }
