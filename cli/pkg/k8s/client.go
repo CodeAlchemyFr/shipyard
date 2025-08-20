@@ -437,6 +437,7 @@ func (c *Client) getGVRForObject(obj *unstructured.Unstructured) (schema.GroupVe
 		"ConfigMap":              "configmaps",
 		"Ingress":                "ingresses",
 		"HorizontalPodAutoscaler": "horizontalpodautoscalers",
+		"Namespace":              "namespaces",
 	}
 	
 	resource, ok := resourceMap[gvk.Kind]
@@ -449,7 +450,7 @@ func (c *Client) getGVRForObject(obj *unstructured.Unstructured) (schema.GroupVe
 	switch gvk.Kind {
 	case "Deployment":
 		group = "apps"
-	case "Service", "Secret", "ConfigMap":
+	case "Service", "Secret", "ConfigMap", "Namespace":
 		group = ""
 	case "Ingress":
 		group = "networking.k8s.io"
