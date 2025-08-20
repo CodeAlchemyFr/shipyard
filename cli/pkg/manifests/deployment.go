@@ -42,7 +42,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .App.GetDNSName }}
-        image: {{ if .CICD.Enabled }}{{ if .CICD.ImageTag }}{{ .CICD.ImageTag }}{{ else }}${IMAGE_TAG}{{ end }}{{ else }}{{ .App.Image }}{{ end }}
+        image: {{ .App.Image }}
         ports:
         - containerPort: {{ .App.Port }}
         env:
