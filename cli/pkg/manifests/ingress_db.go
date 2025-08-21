@@ -20,10 +20,9 @@ metadata:
     # Traefik annotations (k3s default ingress controller)
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/redirect-to-https: "true"
     # Cert-manager annotations (if cert-manager is installed)
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    # Nginx annotations (if nginx-ingress is used instead of Traefik)
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   {{- if .SSLEnabled }}
   tls:

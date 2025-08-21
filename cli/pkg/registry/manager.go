@@ -378,27 +378,13 @@ func (m *Manager) SelectRegistriesInteractive(imageName string) ([]*Registry, er
 	fmt.Println("  0. None (skip registry secrets)")
 	fmt.Println()
 
-	// Auto-suggest based on image
-	var suggestedRegistry *Registry
-	if len(registries) > 0 {
-		suggestedRegistry = m.findMatchingRegistry(registries, imageName)
-		if suggestedRegistry != nil {
-			fmt.Printf("💡 Suggested registry for '%s': %s\n", imageName, suggestedRegistry.RegistryURL)
-			fmt.Printf("   Press Enter to use suggested registry, or type numbers to select others.\n")
-		}
-	}
-
-	fmt.Print("\nSelect registries (comma-separated, e.g., 1,2 or press Enter for suggestion): ")
+	fmt.Print("\nSelect registries (comma-separated, e.g., 1,2): ")
 	
 	// Read user input
 	var input string
 	fmt.Scanln(&input)
 
-	// Handle empty input (use suggestion)
-	if strings.TrimSpace(input) == "" && suggestedRegistry != nil {
-		return []*Registry{suggestedRegistry}, nil
-	}
-	
+	// Handle empty input or 0
 	if strings.TrimSpace(input) == "" || input == "0" {
 		fmt.Println("✅ No registry secrets will be used")
 		return []*Registry{}, nil
@@ -459,26 +445,6 @@ func (m *Manager) ListRegistriesForSelection() ([]Registry, error) {
 	return m.ListRegistries()
 }
 
-// findMatchingRegistry finds the best matching registry for an image
-func (m *Manager) findMatchingRegistry(registries []Registry, imageName string) *Registry {
-	imageRegistry := extractRegistryFromImage(imageName)
-	
-	// Look for exact match
-	for _, registry := range registries {
-		if registry.RegistryURL == imageRegistry {
-			return &registry
-		}
-	}
-	
-	// Look for default registry
-	for _, registry := range registries {
-		if registry.IsDefault {
-			return &registry
-		}
-	}
-	
-	return nil
-}
 
 // promptForCustomRegistry prompts user to enter custom registry credentials
 func (m *Manager) promptForCustomRegistry() (*Registry, error) {
