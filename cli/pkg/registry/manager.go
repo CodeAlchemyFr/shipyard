@@ -334,9 +334,6 @@ func extractRegistryFromImage(image string) string {
 
 // CreateDockerConfigSecret creates Docker config for imagePullSecrets
 func (m *Manager) CreateDockerConfigSecret(registry *Registry) (map[string]interface{}, error) {
-	// Debug: log password to see if it's *** or real token
-	fmt.Printf("🔍 DEBUG: Creating secret for %s with password: %s\n", registry.Username, registry.Password)
-	
 	// Create Docker config format
 	auth := base64.StdEncoding.EncodeToString([]byte(registry.Username + ":" + registry.Password))
 	
@@ -370,7 +367,7 @@ func (m *Manager) SelectRegistriesInteractive(imageName string) ([]*Registry, er
 			if registry.IsDefault {
 				defaultMarker = " (default)"
 			}
-			fmt.Printf("  %d. %s%s\n", i+1, registry.RegistryURL, defaultMarker)
+			fmt.Printf("  %d. %s (%s)%s\n", i+1, registry.RegistryURL, registry.Username, defaultMarker)
 		}
 		fmt.Printf("  %d. Custom registry (enter manually)\n", len(registries)+1)
 	} else {
@@ -439,13 +436,11 @@ func (m *Manager) SelectRegistriesInteractive(imageName string) ([]*Registry, er
 			registry := registries[index-1]
 			
 			// Decrypt password for the selected registry
-			fmt.Printf("🔍 DEBUG: Before GetRegistry, password is: %s\n", registry.Password)
 			decryptedRegistry, err := m.GetRegistry(registry.RegistryURL)
 			if err != nil {
 				fmt.Printf("⚠️  Failed to get registry %s: %v\n", registry.RegistryURL, err)
 				continue
 			}
-			fmt.Printf("🔍 DEBUG: After GetRegistry, password is: %s\n", decryptedRegistry.Password)
 			
 			selected = append(selected, decryptedRegistry)
 			fmt.Printf("✅ Selected: %s\n", registry.RegistryURL)
@@ -540,6 +535,5 @@ func (m *Manager) SelectRegistriesAuto(imageName string) ([]*Registry, error) {
 		return []*Registry{}, nil
 	}
 
-	fmt.Printf("🔐 Auto-selected registry: %s for image %s\n", imageRegistry.RegistryURL, imageName)
 	return []*Registry{imageRegistry}, nil
 }

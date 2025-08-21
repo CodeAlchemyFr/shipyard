@@ -145,10 +145,5 @@ func (g *Generator) generateDeployment(appDir string) error {
 		return fmt.Errorf("failed to execute deployment template: %w", err)
 	}
 
-	fmt.Printf("📄 Generated: %s", filePath)
-	if g.version != nil {
-		fmt.Printf(" (version: %s)", g.version.Version)
-	}
-	fmt.Printf("\n")
 	return nil
 }

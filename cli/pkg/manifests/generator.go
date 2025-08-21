@@ -16,7 +16,6 @@ type Generator struct {
 	outputDir        string
 	version          *DeploymentVersion // Add version tracking
 	imagePullSecrets []string           // Registry secrets for private images
-	interactiveMode  bool               // Whether to use interactive registry selection
 }
 
 // NewGenerator creates a new manifest generator
@@ -33,27 +32,9 @@ func NewGenerator(cfg *Config) *Generator {
 		outputDir:        manifestsDir,
 		version:          nil,
 		imagePullSecrets: []string{},
-		interactiveMode:  true, // Default to interactive mode
 	}
 }
 
-// NewGeneratorWithMode creates a new manifest generator with specified interaction mode
-func NewGeneratorWithMode(cfg *Config, interactive bool) *Generator {
-	// Get manifests directory from global config
-	manifestsDir, err := config.GetManifestsDir()
-	if err != nil {
-		// Fallback to local directory on error
-		manifestsDir = "manifests"
-	}
-	
-	return &Generator{
-		config:           cfg,
-		outputDir:        manifestsDir,
-		version:          nil,
-		imagePullSecrets: []string{},
-		interactiveMode:  interactive,
-	}
-}
 
 // NewGeneratorWithVersion creates a new manifest generator with version tracking
 func NewGeneratorWithVersion(cfg *Config, version *DeploymentVersion) *Generator {
@@ -69,27 +50,9 @@ func NewGeneratorWithVersion(cfg *Config, version *DeploymentVersion) *Generator
 		outputDir:        manifestsDir,
 		version:          version,
 		imagePullSecrets: []string{},
-		interactiveMode:  true, // Default to interactive mode
 	}
 }
 
-// NewGeneratorWithVersionAndMode creates a new manifest generator with version tracking and interaction mode
-func NewGeneratorWithVersionAndMode(cfg *Config, version *DeploymentVersion, interactive bool) *Generator {
-	// Get manifests directory from global config
-	manifestsDir, err := config.GetManifestsDir()
-	if err != nil {
-		// Fallback to local directory on error
-		manifestsDir = "manifests"
-	}
-	
-	return &Generator{
-		config:           cfg,
-		outputDir:        manifestsDir,
-		version:          version,
-		imagePullSecrets: []string{},
-		interactiveMode:  interactive,
-	}
-}
 
 // GenerateAppManifests creates all manifests for an application
 func (g *Generator) GenerateAppManifests() error {
@@ -137,7 +100,6 @@ func (g *Generator) generateStandardManifests() error {
 		return fmt.Errorf("failed to create app directory %s: %w", appDir, err)
 	}
 
-	fmt.Printf("📁 Created directory: %s\n", appDir)
 
 	// Generate registry secrets if needed
 	imagePullSecrets, err := g.GenerateRegistrySecrets(appDir)
@@ -249,7 +211,6 @@ metadata:
 		return fmt.Errorf("failed to create namespace file: %w", err)
 	}
 	
-	fmt.Printf("🏗️  Generated namespace: %s (for app: %s)\n", namespacePath, g.config.App.Name)
 	return nil
 }
 

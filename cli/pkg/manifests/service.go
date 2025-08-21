@@ -47,6 +47,5 @@ func (g *Generator) generateService(appDir string) error {
 		return fmt.Errorf("failed to execute service template: %w", err)
 	}
 
-	fmt.Printf("🔗 Generated: %s\n", filePath)
 	return nil
 }

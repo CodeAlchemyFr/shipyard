@@ -65,6 +65,5 @@ func (g *Generator) generateSecrets(appDir string) error {
 		return fmt.Errorf("failed to execute secrets template: %w", err)
 	}
 
-	fmt.Printf("🔐 Generated: %s (with %d secrets base64 encoded)\n", filePath, len(g.config.Secrets))
 	return nil
 }

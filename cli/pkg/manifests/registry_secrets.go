@@ -41,18 +41,10 @@ func (g *Generator) GenerateRegistrySecrets(appDir string) ([]string, error) {
 
 	var selectedRegistries []*registry.Registry
 	
-	if g.interactiveMode {
-		// Interactive selection of registries
-		selectedRegistries, err = manager.SelectRegistriesInteractive(g.config.App.Image)
-		if err != nil {
-			return nil, fmt.Errorf("failed to select registries interactively: %w", err)
-		}
-	} else {
-		// Automatic selection of registries
-		selectedRegistries, err = manager.SelectRegistriesAuto(g.config.App.Image)
-		if err != nil {
-			return nil, fmt.Errorf("failed to select registries automatically: %w", err)
-		}
+	// Always use interactive selection
+	selectedRegistries, err = manager.SelectRegistriesInteractive(g.config.App.Image)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select registries interactively: %w", err)
 	}
 
 	if len(selectedRegistries) == 0 {
@@ -139,7 +131,6 @@ func (g *Generator) generateSingleRegistrySecret(appDir string, selectedRegistry
 		return "", fmt.Errorf("failed to execute registry secret template: %w", err)
 	}
 
-	fmt.Printf("🔐 Generated: %s (registry: %s)\n", filePath, selectedRegistry.RegistryURL)
 	
 	return secretName, nil
 }
