@@ -439,11 +439,13 @@ func (m *Manager) SelectRegistriesInteractive(imageName string) ([]*Registry, er
 			registry := registries[index-1]
 			
 			// Decrypt password for the selected registry
+			fmt.Printf("🔍 DEBUG: Before GetRegistry, password is: %s\n", registry.Password)
 			decryptedRegistry, err := m.GetRegistry(registry.RegistryURL)
 			if err != nil {
 				fmt.Printf("⚠️  Failed to get registry %s: %v\n", registry.RegistryURL, err)
 				continue
 			}
+			fmt.Printf("🔍 DEBUG: After GetRegistry, password is: %s\n", decryptedRegistry.Password)
 			
 			selected = append(selected, decryptedRegistry)
 			fmt.Printf("✅ Selected: %s\n", registry.RegistryURL)
