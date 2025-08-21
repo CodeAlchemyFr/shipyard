@@ -115,7 +115,7 @@ func runRollback(targetIdentifier string) error {
 		return fmt.Errorf("failed to create k8s client: %w", err)
 	}
 
-	if err := client.ApplyManifests(config.App.Name); err != nil {
+	if err := client.ApplyManifestsWithNamespace(config.App.Name, config.App.GetNamespace()); err != nil {
 		// Mark rollback as failed
 		newVersionManager.UpdateVersionStatus(rollbackVersion.Version, "failed")
 		return fmt.Errorf("failed to apply rollback manifests: %w", err)

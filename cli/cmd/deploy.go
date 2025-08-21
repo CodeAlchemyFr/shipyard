@@ -90,7 +90,7 @@ func runDeploy() error {
 	}
 
 	fmt.Printf("🔧 Applying manifests for %s...\n", config.App.Name)
-	if err := client.ApplyManifests(config.App.Name); err != nil {
+	if err := client.ApplyManifestsWithNamespace(config.App.Name, config.App.GetNamespace()); err != nil {
 		// Mark deployment as failed
 		versionManager.UpdateVersionStatus(deployVersion.Version, "failed")
 		

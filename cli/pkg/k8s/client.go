@@ -85,6 +85,11 @@ func NewClient() (*Client, error) {
 
 // ApplyManifests applies all manifests for an application
 func (c *Client) ApplyManifests(appName string) error {
+	return c.ApplyManifestsWithNamespace(appName, appName)
+}
+
+// ApplyManifestsWithNamespace applies all manifests for an application with specific namespace
+func (c *Client) ApplyManifestsWithNamespace(appName, appNamespace string) error {
 	// Get app directory from global config
 	appsDir, err := config.GetAppsDir()
 	if err != nil {
@@ -110,16 +115,15 @@ func (c *Client) ApplyManifests(appName string) error {
 	}
 
 	// Copy registry secrets from default to app namespace (after namespace is created)
-	fmt.Printf("📋 Copying registry secrets to namespace %s...\n", appName)
-	if err := c.CopyRegistrySecretsFromDefault(appName); err != nil {
+	fmt.Printf("📋 Copying registry secrets to namespace %s...\n", appNamespace)
+	if err := c.CopyRegistrySecretsFromDefault(appNamespace); err != nil {
 		fmt.Printf("⚠️  Warning: failed to copy registry secrets: %v\n", err)
 	}
 
 	// Wait for deployment to be ready
 	dnsName := appName // TODO: Add DNS validation warning if needed
-	namespace := appName // Use app name as namespace - TODO: Add DNS validation
 	fmt.Printf("⏳ Waiting for deployment %s to be ready...\n", dnsName)
-	if err := c.waitForDeployment(dnsName, namespace, 5*time.Minute); err != nil {
+	if err := c.waitForDeployment(dnsName, appNamespace, 5*time.Minute); err != nil {
 		return fmt.Errorf("deployment failed to become ready: %w", err)
 	}
 

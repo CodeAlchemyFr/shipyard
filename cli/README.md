@@ -47,6 +47,7 @@ app:
   name: my-api
   image: ghcr.io/myuser/my-api:latest
   port: 3000
+  namespace: my-api  # optionnel, utilise le nom de l'app par défaut
 
 service:
   type: ClusterIP     # ou NodePort pour accès externe
@@ -93,9 +94,12 @@ domains:
 
 Cette commande va :
 1. Lire la configuration `paas.yaml`
-2. Générer les manifests Kubernetes dans `manifests/`
-3. Appliquer les manifests sur le cluster
-4. Attendre que le déploiement soit prêt
+2. **Demander de sélectionner des registries Docker** (sélection obligatoire)
+3. Générer les manifests Kubernetes dans `manifests/`
+4. Créer automatiquement les namespaces si nécessaire
+5. Copier les secrets de registries entre namespaces
+6. Appliquer les manifests sur le cluster
+7. Attendre que le déploiement soit prêt
 
 ### Voir le statut
 
@@ -172,6 +176,8 @@ Shipyard offre des modes interactifs pour une gestion simplifiée :
 - Ajouter/supprimer des registries Docker
 - Configurer registry par défaut
 - Configuration simplifiée (URL, username, token uniquement)
+- **Sélection obligatoire** : choix explicite requis à chaque déploiement
+- **Affichage des usernames** dans la liste de sélection
 
 **Gestion des domaines :**
 ```bash
@@ -197,11 +203,44 @@ manifests/
 │   └── my-api/
 │       ├── deployment.yaml (avec labels de version)
 │       ├── secrets.yaml
+│       ├── registry-secret.yaml (secrets Docker pour namespace)
 │       └── service.yaml
 ├── shared/
+│   ├── namespace-my-api.yaml (namespace automatique)
 │   └── mycompany.com.yaml (ingress par domaine de base)
 └── shipyard.db (base SQLite : versions + domaines)
 ```
+
+## Gestion des Registries Docker
+
+### Sélection Interactive Obligatoire
+
+À chaque déploiement, Shipyard vous demande de sélectionner explicitement quels registries utiliser :
+
+```
+🐳 Select registry secrets for image: ghcr.io/myuser/my-api
+
+Available registries:
+  1. ghcr.io (myusername) (default)
+  2. docker.io (anotheruser)
+  3. Custom registry (enter manually)
+  0. None (skip registry secrets)
+
+Select registries (comma-separated, e.g., 1,2): 1
+```
+
+**Points importants :**
+- ⚠️ **Pas de sélection automatique** : vous devez explicitement taper un numéro
+- ✅ **Affichage des usernames** : voir facilement quel compte utiliser
+- 🔢 **Sélection multiple** : `1,2` pour utiliser plusieurs registries
+- 🚫 **Option "aucun"** : `0` pour les images publiques
+
+### Isolation par Namespace
+
+Chaque application est déployée dans son propre namespace :
+- **Isolation complète** entre applications
+- **Copie automatique** des secrets de registries du namespace `default`
+- **Création automatique** des namespaces si nécessaires
 
 ## Fonctionnalités
 
@@ -213,6 +252,8 @@ manifests/
 - ✅ **Application directe sur le cluster**
 - ✅ **Logs en temps réel**
 - ✅ **Statut des applications**
+- ✅ **Isolation par namespaces** automatique
+- ✅ **Sélection interactive des registries** obligatoire
 
 ### Versioning & Déploiements
 - ✅ **Versioning des déploiements**
@@ -231,6 +272,8 @@ manifests/
 - ✅ **Configuration Let's Encrypt interactive**
 - ✅ **Support Traefik (k3s) et nginx-ingress**
 - ✅ **Certificats HTTPS automatiques**
+- ✅ **Redirection HTTP vers HTTPS** automatique
+- ✅ **Support ExternalName services** avec Traefik
 
 ### Services & Networking
 - ✅ **Configuration de services avancée** (ClusterIP, NodePort)
