@@ -334,6 +334,9 @@ func extractRegistryFromImage(image string) string {
 
 // CreateDockerConfigSecret creates Docker config for imagePullSecrets
 func (m *Manager) CreateDockerConfigSecret(registry *Registry) (map[string]interface{}, error) {
+	// Debug: log password to see if it's *** or real token
+	fmt.Printf("🔍 DEBUG: Creating secret for %s with password: %s\n", registry.Username, registry.Password)
+	
 	// Create Docker config format
 	auth := base64.StdEncoding.EncodeToString([]byte(registry.Username + ":" + registry.Password))
 	
